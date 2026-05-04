@@ -105,9 +105,17 @@ Bu dosya sırasıyla hangi dosyada ne yaptığımızı tutuyor; sunum ve takım 
 - Bunların hepsi yazılmış ve çalışmaya hazır kod.
 
 ## Sıradaki adımlar (disk açıldıktan sonra)
-1. `docker compose build pipeline dashboard` (10-15 dk).
-2. `make up && make bronze` (terminal A, streaming).
-3. `docker compose up -d producer` (terminal B, ratings'i bas).
-4. 30 sn sonra `make silver` (terminal C, streaming).
-5. Veri biriktikten sonra `make gold && make train`.
-6. `make inference && make dashboard` → http://localhost:8501.
+1. `make verify` (sentaks kontrolü, disk yormaz).
+2. `make run-all` — tek komut uçtan-uca pipeline.
+3. Sonuçlar: dashboard:8501, mlflow:5000, sparkUI:8080.
+
+## 15. İkinci tur iyileştirmeleri (commit 2)
+- `spark/Dockerfile` — Maven JAR pre-resolve adımı kaldırıldı (4 GB → 1.2 GB).
+- `docker-compose.yml` — `ivy-cache` named volume eklendi; JAR'lar runtime'da cache'leniyor.
+- `producer/ratings_producer.py` — `PRODUCER_MODE`: `fixed` (varsayılan, 1000 msg/s sabit) / `speedup` (timestamp tabanlı) / `burst` (sleep yok). Eski speedup-only modu çok yavaştı.
+- `spark/jobs/silver_clean.py` — `cleaned.persist()` + `try/finally unpersist`; merge ile count aynı plan üzerinden çalışsın.
+- `spark/ml/inference.py` — eksik `import mlflow.spark` eklendi.
+- `dashboard/app.py` — gereksiz `TableNotFoundError` import temizliği, `pd.DataFrame | None` type-hint kaldırıldı (3.10 öncesi uyumluluk).
+- `scripts/run_all.sh` — bronze/silver arka planda, producer foreground, gold→train→inference sırasıyla.
+- `scripts/verify.sh` — compose config + py_compile + bash -n + dockerfile parse + dataset kontrolü + requirements pin kontrolü.
+- `Makefile` — `make verify`, `make run-all` hedefleri.

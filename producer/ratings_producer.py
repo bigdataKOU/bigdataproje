@@ -1,9 +1,13 @@
 """
-MovieLens ratings.csv'i Kafka topic'ine kronolojik sırada basar.
+MovieLens ratings.csv'i Kafka topic'ine basar.
 
 ratings.csv formati: userId,movieId,rating,timestamp
-Producer her satırı JSON olarak kafka'ya yazar. Speedup faktörü ile
-gerçek zamandaki saniye farkları sıkıştırılır (1000 = 1000x hızlı).
+Producer her satırı JSON olarak kafka'ya yazar.
+
+Pacing modlari (PRODUCER_MODE):
+  fixed     - PRODUCER_RATE msg/saniye sabit hizda bas (varsayilan, demo dostu)
+  speedup   - timestamp farklarini PRODUCER_SPEEDUP ile sikistirilmis biçimde uygula
+  burst     - sleep yok, mumkun oldugunca hizli (yuk testi)
 """
 
 import csv
@@ -17,6 +21,8 @@ from confluent_kafka import Producer
 KAFKA_BROKER = os.environ.get("KAFKA_BROKER", "kafka:9092")
 TOPIC = os.environ.get("KAFKA_TOPIC_RATINGS", "ratings")
 RATINGS_PATH = os.environ.get("RATINGS_PATH", "/opt/data/ml-25m/ratings.csv")
+MODE = os.environ.get("PRODUCER_MODE", "fixed").lower()
+RATE = float(os.environ.get("PRODUCER_RATE", "1000"))
 SPEEDUP = float(os.environ.get("PRODUCER_SPEEDUP", "100000"))
 MAX_RECORDS = int(os.environ.get("PRODUCER_MAX_RECORDS", "500000"))
 FLUSH_EVERY = int(os.environ.get("PRODUCER_FLUSH_EVERY", "5000"))
@@ -53,11 +59,14 @@ def main() -> int:
     })
 
     sent = 0
-    prev_ts: int | None = None
+    prev_ts = None
     started_at = time.time()
+    next_emit_at = started_at
+    interval = 1.0 / RATE if RATE > 0 else 0.0
 
     print(f"[producer] broker={KAFKA_BROKER} topic={TOPIC} "
-          f"path={RATINGS_PATH} speedup={SPEEDUP} max={MAX_RECORDS}", flush=True)
+          f"path={RATINGS_PATH} mode={MODE} rate={RATE} "
+          f"speedup={SPEEDUP} max={MAX_RECORDS}", flush=True)
 
     with open(RATINGS_PATH, newline="") as fh:
         reader = csv.DictReader(fh)
@@ -81,10 +90,16 @@ def main() -> int:
                 "ingestedAt": int(time.time() * 1000),
             }
 
-            if prev_ts is not None and SPEEDUP > 0:
+            if MODE == "fixed" and interval > 0:
+                now = time.time()
+                if next_emit_at > now:
+                    time.sleep(next_emit_at - now)
+                next_emit_at += interval
+            elif MODE == "speedup" and prev_ts is not None and SPEEDUP > 0:
                 wait = max(0.0, (ts - prev_ts) / SPEEDUP)
                 if wait > 0:
                     time.sleep(min(wait, 1.0))
+            # MODE == "burst": no sleep
             prev_ts = ts
 
             producer.produce(

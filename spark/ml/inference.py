@@ -9,6 +9,7 @@ import os
 import sys
 
 import mlflow
+import mlflow.spark
 from pyspark.sql import functions as F
 
 sys.path.insert(0, "/opt/app/jobs")

@@ -42,9 +42,6 @@ def upsert_to_silver(spark: SparkSession, movies: DataFrame):
     target_path = silver_path()
 
     def _process(batch_df: DataFrame, batch_id: int) -> None:
-        if batch_df.rdd.isEmpty():
-            return
-
         cleaned = (
             batch_df.where(
                 F.col("userId").isNotNull()
@@ -71,23 +68,32 @@ def upsert_to_silver(spark: SparkSession, movies: DataFrame):
                 "genre_list",
                 "ingestedAt",
             )
+            .persist()
         )
 
-        if not DeltaTable.isDeltaTable(spark, target_path):
-            (cleaned.write.format("delta")
-                 .partitionBy("event_date")
-                 .mode("overwrite")
-                 .save(target_path))
-            print(f"[silver] batch={batch_id} bootstrapped silver", flush=True)
-            return
+        try:
+            n = cleaned.count()
+            if n == 0:
+                return
 
-        target = DeltaTable.forPath(spark, target_path)
-        (target.alias("t")
-              .merge(cleaned.alias("s"),
-                     "t.rating_event_id = s.rating_event_id")
-              .whenNotMatchedInsertAll()
-              .execute())
-        print(f"[silver] batch={batch_id} merged rows={cleaned.count()}", flush=True)
+            if not DeltaTable.isDeltaTable(spark, target_path):
+                (cleaned.write.format("delta")
+                     .partitionBy("event_date")
+                     .mode("overwrite")
+                     .save(target_path))
+                print(f"[silver] batch={batch_id} bootstrapped rows={n}",
+                      flush=True)
+                return
+
+            target = DeltaTable.forPath(spark, target_path)
+            (target.alias("t")
+                  .merge(cleaned.alias("s"),
+                         "t.rating_event_id = s.rating_event_id")
+                  .whenNotMatchedInsertAll()
+                  .execute())
+            print(f"[silver] batch={batch_id} merged rows={n}", flush=True)
+        finally:
+            cleaned.unpersist()
 
     return _process
 

@@ -18,7 +18,7 @@ MASTER="${SPARK_MASTER_URL:-local[*]}"
 exec /opt/spark/bin/spark-submit \
     --master "${MASTER}" \
     --packages "${PACKAGES}" \
-    --conf spark.jars.ivy=/opt/spark/.ivy2 \
+    --conf spark.jars.ivy=/opt/ivy-cache \
     --conf spark.sql.extensions=io.delta.sql.DeltaSparkSessionExtension \
     --conf spark.sql.catalog.spark_catalog=org.apache.spark.sql.delta.catalog.DeltaCatalog \
     --conf spark.sql.adaptive.enabled=true \

@@ -2,13 +2,11 @@
 import os
 from pathlib import Path
 
+import mlflow
 import pandas as pd
 import plotly.express as px
 import streamlit as st
 from deltalake import DeltaTable
-from deltalake.exceptions import TableNotFoundError
-
-import mlflow
 
 DELTA_PATH = Path(os.environ.get("DELTA_PATH", "/opt/delta"))
 RECS_PATH = DELTA_PATH / "gold" / "user_recommendations"
@@ -24,15 +22,15 @@ st.caption("Kafka → Spark Streaming → Delta Lake → ALS → MLflow")
 
 
 @st.cache_data(ttl=30)
-def read_delta(path: str) -> pd.DataFrame | None:
+def read_delta(path: str):
     try:
         return DeltaTable(path).to_pandas()
-    except (TableNotFoundError, FileNotFoundError, Exception):
+    except Exception:
         return None
 
 
 @st.cache_data(ttl=60)
-def read_delta_count(path: str) -> int | None:
+def read_delta_count(path: str):
     try:
         return DeltaTable(path).to_pyarrow_dataset().count_rows()
     except Exception:

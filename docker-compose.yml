@@ -6,6 +6,7 @@ x-spark-volumes: &spark-volumes
   - ./delta-store:/opt/delta
   - ./checkpoints:/opt/checkpoints
   - ./mlruns:/opt/mlruns
+  - ivy-cache:/opt/ivy-cache
 
 services:
 
@@ -85,6 +86,8 @@ services:
       KAFKA_BROKER: kafka:9092
       KAFKA_TOPIC_RATINGS: ratings
       RATINGS_PATH: /opt/data/ml-25m/ratings.csv
+      PRODUCER_MODE: ${PRODUCER_MODE:-fixed}
+      PRODUCER_RATE: ${PRODUCER_RATE:-1000}
       PRODUCER_SPEEDUP: ${PRODUCER_SPEEDUP:-100000}
       PRODUCER_MAX_RECORDS: ${PRODUCER_MAX_RECORDS:-500000}
     volumes:
@@ -131,3 +134,4 @@ services:
 
 volumes:
   kafka-data:
+  ivy-cache:

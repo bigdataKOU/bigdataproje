@@ -61,8 +61,8 @@ uçtan-uca konteynerize bir veri mühendisliği + veri bilimi projesi içerir. V
 ### Ön gereksinimler
 
 - Docker 24+ ve Docker Compose v2
-- 8 GB+ RAM önerilir
-- MovieLens 25M dataseti `data/ml-25m/` altında (zip indirilip çıkarılmış)
+- 8 GB+ RAM, **~10 GB boş disk** (image'lar + delta tabloları + Maven cache için)
+- MovieLens 25M dataseti `../ml-25m/` (proje kardeşi) ya da `ML25M_DIR` env ile başka yol
 
 ### 1. Kurulum
 
@@ -71,63 +71,63 @@ git clone https://github.com/bigdataKOU/bigdataproje.git
 cd bigdataproje
 cp .env.example .env
 
-# Veri seti
-mkdir -p data && cd data
-wget https://files.grouplens.org/datasets/movielens/ml-25m.zip
-unzip ml-25m.zip
-cd ..
+# Veri seti — projenin yanında ../ml-25m olarak duracak şekilde:
+cd .. && wget https://files.grouplens.org/datasets/movielens/ml-25m.zip
+unzip ml-25m.zip && cd bigdataproje
 ```
 
-### 2. Servisleri başlat
+### 2. Hızlı doğrulama (disk yormadan)
+
+Tüm kodun sentaktik olarak sağlam olduğunu, dataset'in yerinde olduğunu kontrol et:
 
 ```bash
-docker compose up -d kafka spark-master spark-worker mlflow
-docker compose logs -f mlflow   # 'Listening at: http://0.0.0.0:5000' gorunmeli
+make verify
 ```
 
-### 3. Bronze streaming + Producer
+### 3. Tek komutla uçtan-uca pipeline
 
 ```bash
-# bronze ingest job'i baslat (terminal A)
-docker compose up -d pipeline
-docker compose exec pipeline /opt/app/run.sh /opt/app/jobs/bronze_ingest.py
-
-# producer'i baslat (terminal B) - 500K rating'i hizli replay eder
-docker compose up producer
+make run-all
 ```
 
-### 4. Silver + Gold
+Bu:
+1. Tüm servisleri başlatır (kafka, spark master+worker, mlflow, pipeline, dashboard)
+2. Bronze streaming job'unu arka planda başlatır
+3. Producer ile 50K rating'i Kafka'ya basar (default: 1000 msg/sec)
+4. Silver streaming job'u başlatır
+5. 60 sn veri birikmesi için bekler
+6. Gold batch + ALS train + Inference çalıştırır
+7. Dashboard'u açık bırakır
 
-Bronze biraz veri biriktirdikten sonra (örn. 30 saniye):
+İlk çalıştırma ~10-15 dakika (image build + Maven JAR cache). Sonraki çalıştırmalar ~2-3 dk.
 
-```bash
-# silver - streaming, surekli calisir
-docker compose exec pipeline /opt/app/run.sh /opt/app/jobs/silver_clean.py
+**Çıktılar:**
+- Dashboard: http://localhost:8501
+- MLflow UI: http://localhost:5000
+- Spark UI: http://localhost:8080
 
-# gold - batch, ihtiyac duydukca calistir
-docker compose exec pipeline /opt/app/run.sh /opt/app/jobs/gold_features.py
-```
-
-### 5. ALS modeli + MLflow
-
-```bash
-docker compose exec pipeline /opt/app/run.sh /opt/app/ml/train_als.py
-# MLflow UI: http://localhost:5000
-```
-
-### 6. Inference + Dashboard
+### 4. Manüel adım adım (debug için)
 
 ```bash
-docker compose exec pipeline /opt/app/run.sh /opt/app/ml/inference.py
-docker compose up -d dashboard
-# Dashboard: http://localhost:8501
+make up                  # kafka + spark + mlflow ayağa
+make build               # tüm image'lar
+make bronze   &          # streaming, terminal A
+make producer            # ratings'i bas
+make silver   &          # streaming, terminal B
+make gold                # batch
+make train               # ALS + MLflow run
+make inference           # öneri tablosu
+make dashboard           # http://localhost:8501
 ```
 
 ## Konfigürasyon (`.env`)
 
 | Değişken | Varsayılan | Açıklama |
 |---|---|---|
-| `PRODUCER_SPEEDUP` | `100000` | Timestamp hızlandırma faktörü |
+| `ML25M_DIR` | `../ml-25m` | Dataset host yolu |
+| `PRODUCER_MODE` | `fixed` | `fixed` / `speedup` / `burst` |
+| `PRODUCER_RATE` | `1000` | mesaj/sn (fixed mode) |
+| `PRODUCER_SPEEDUP` | `100000` | Timestamp hızlandırma (speedup mode) |
 | `PRODUCER_MAX_RECORDS` | `500000` | Üretilecek max rating sayısı |
 | `ALS_RANK` | `16` | ALS latent factor sayısı |
 | `ALS_REG` | `0.1` | Regularizasyon |
@@ -139,8 +139,12 @@ docker compose up -d dashboard
 ```
 bigdataproje/
 ├── docker-compose.yml
+├── Makefile
 ├── .env.example
-├── data/                     ← ml-25m (gitignore)
+├── fixes.txt                 ← Karsilasilan hatalar + cozumler
+├── scripts/
+│   ├── run_all.sh            ← Tek-komut full pipeline
+│   └── verify.sh             ← Static check'ler
 ├── producer/                 ← Kafka producer
 │   ├── Dockerfile
 │   ├── requirements.txt
@@ -161,6 +165,7 @@ bigdataproje/
 │   ├── Dockerfile
 │   ├── requirements.txt
 │   └── app.py
+├── notebooks/01_eda.ipynb    ← Kesifsel veri analizi
 └── docs/
     ├── PROGRESS.md           ← Adim adim ne yapildigi
     └── architecture.md

@@ -1,8 +1,10 @@
 # Pipeline calistirma kolayliklari
-.PHONY: help up down build kafka mlflow producer bronze silver gold train inference dashboard logs ps clean
+.PHONY: help verify run-all up down build kafka mlflow producer bronze silver gold train inference dashboard logs ps clean
 
 help:
 	@echo "Hedefler:"
+	@echo "  make verify      - Static check'ler (docker'siz, disk yormadan)"
+	@echo "  make run-all     - Tek komut uctan-uca pipeline"
 	@echo "  make up          - Tum servisleri baslat"
 	@echo "  make down        - Tum servisleri durdur"
 	@echo "  make build       - Tum image'lari build et"
@@ -18,6 +20,12 @@ help:
 	@echo "  make logs S=svc  - Servis loglari"
 	@echo "  make ps          - Servis durumu"
 	@echo "  make clean       - Tum delta + checkpoint + mlflow verisini sil"
+
+verify:
+	bash scripts/verify.sh
+
+run-all:
+	bash scripts/run_all.sh
 
 build:
 	docker compose build
