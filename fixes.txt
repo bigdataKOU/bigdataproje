@@ -1,0 +1,117 @@
+FIXES — Geliştirme sırasında karşılaşılan hatalar ve çözümleri
+================================================================
+
+1) docker-compose.yml — YAML anchor cycle
+----------------------------------------------------------------
+Hata:
+  failed to parse docker-compose.yml: yaml: unmarshal errors:
+    line 1: cycle detected: node at path services.spark-master.environment
+    references node at path services.spark-master
+
+Kök neden:
+  spark-common adında tek bir anchor tanımlamıştım (image + environment + volumes).
+  Sonra services.spark-master içinde:
+      <<: *spark-common
+      environment:
+        <<: *spark-common      <-- BURADA spark-common bütünüyle merge edildi
+                                   ama spark-common kendi içindeki environment'i de
+                                   service node'una bagliyor → cycle.
+
+Cozum:
+  Iki ayri anchor'a böldüm:
+    x-spark-env:    sadece env variable'lar
+    x-spark-common: sadece image + volumes
+  Boylece environment merge'i sadece x-spark-env'i referans veriyor,
+  service node'una geri donmuyor.
+
+Etkilenen dosya: docker-compose.yml
+
+
+2) Image bulunamadi — bitnami/kafka:3.7 ve bitnami/spark:3.5.1
+----------------------------------------------------------------
+Hata:
+  failed to resolve reference "docker.io/bitnami/kafka:3.7":
+  docker.io/bitnami/kafka:3.7: not found
+
+Kok neden:
+  Bitnami, 2025 sonunda public registry'sinde tag stratejisini
+  degistirdi (Bitnami Application Catalog -> "legacy"/Bitnami Secure Images).
+  Onceki ucretsiz "ana" tag'ler (3.7, 3.5.1) artik mevcut degil.
+
+Cozum:
+  Apache'nin resmi Docker imajlarina gectik:
+    bitnami/kafka:3.7         -> apache/kafka:3.9.0
+    bitnami/spark:3.5.1       -> apache/spark:3.5.8-python3
+
+  Apache imajlarinda env var konvansiyonu farkli:
+    KAFKA_CFG_NODE_ID         -> KAFKA_NODE_ID  (CFG_ kalkti)
+    KAFKA_CFG_PROCESS_ROLES   -> KAFKA_PROCESS_ROLES
+    KAFKA_KRAFT_CLUSTER_ID    -> CLUSTER_ID
+  Spark imaji da bitnami gibi otomatik master/worker baslatmiyor;
+  command: ile elle "/opt/spark/sbin/start-master.sh" ya da
+  start-worker.sh cagriyoruz. SPARK_HOME=/opt/spark (bitnami'de
+  /opt/bitnami/spark idi).
+
+Etkilenen dosyalar:
+  - docker-compose.yml  (image, env vars, command override)
+  - spark/Dockerfile    (FROM apache/spark, SPARK_HOME path)
+  - spark/run.sh        (/opt/bitnami/spark/bin -> /opt/spark/bin)
+
+
+3) Symlink container'a mount edilemiyor
+----------------------------------------------------------------
+Hata:
+  docker run sirasinda /opt/data/ml-25m bos goruyordu, producer:
+  "ratings.csv bulunamadi: /opt/data/ml-25m/ratings.csv"
+
+Kok neden:
+  Repo icine "data/ml-25m -> ../../ml-25m" symlink koymustum.
+  Docker bind-mount calisma dizinini host'tan kopyalar; ancak symlink
+  hedefi (../../ml-25m) bind-mount edilen dizinin disinda kaldigi icin
+  container icinden link olu (broken) gorunuyor.
+
+Cozum:
+  data/ symlink'ini sildim. docker-compose.yml'de bind mount'u dogrudan
+  host'taki gercek dataset dizinine yonlendirdim:
+
+    volumes:
+      - ${ML25M_DIR:-../ml-25m}:/opt/data/ml-25m:ro
+
+  ML25M_DIR env var'i opsiyonel; varsayilan compose'a gore ../ml-25m
+  yani projenin kardesi olan klasor.
+
+Etkilenen dosya: docker-compose.yml (3 yerde: spark-volumes anchor,
+                  producer.volumes, dashboard.volumes)
+
+
+4) Disk dolma — pipeline build sirasinda /tmp tikandi
+----------------------------------------------------------------
+Belirtiler:
+  - Docker buildkit pipeline image build'i 5+ dk surdu.
+  - Sonra terminalden `df`, `pwd`, `echo` dahil her sey "exit 1" verdi.
+  - Read tool araciligiyla bakilan dosyalar 0 byte goruluyordu.
+
+Kok neden:
+  bigdataproje-pipeline image'i Spark 3.5 + Delta + Kafka + MLflow
+  Spark connector jarlarini Maven Central'dan ivy ile cekiyor (~4 GB
+  build cache). Ayni anda kafka-data + spark katmanlari + mlflow
+  sqlite + buildx katmanlari /var/lib/docker'i siskinlestirdi.
+  /tmp ve / partition'lari ayni disk → /tmp doldu, claude-code'un
+  shell wrapper'inin pwd cikti dosyasini yazamadi → tum bash exit 1.
+
+Cozum:
+  Tum container'lari kaldir + buildx cache + image cache'i temizle.
+  Ardindan bash tekrar calisir hale geldi (/tmp acildigi icin).
+
+  $ docker compose down -v
+  $ docker buildx prune -af     # 37.67 GB reclaimed
+  $ docker system prune -af
+
+  Sonraki proje calistirmalarinda dikkat: pipeline image kalibi
+  (cache layer halinde) ~4 GB. Dashboard + mlflow + producer image'leri
+  toplam ~1.5 GB. Disk planlamasi yaparken bunu hesaba kat.
+
+Cikarim:
+  - Pipeline image'i ozellikle agir; build'i tek seferlik yap, dockerhub'a
+    push etmek (gelecek eklenecek) takim icinde re-build maliyetini sifirlar.
+  - Local'de `docker system df` ile build cache izlenmeli.

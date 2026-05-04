@@ -1,0 +1,34 @@
+# Data
+data/ml-25m/
+data/ml-25m.zip
+data/*.csv
+
+# Delta Lake & Spark output
+delta-store/
+spark-warehouse/
+checkpoints/
+_delta_log/
+
+# MLflow
+mlruns/
+mlartifacts/
+*.db
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.ipynb_checkpoints/
+
+# Docker
+.env
+*.log
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
