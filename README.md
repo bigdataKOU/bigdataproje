@@ -76,6 +76,25 @@ cd .. && wget https://files.grouplens.org/datasets/movielens/ml-25m.zip
 unzip ml-25m.zip && cd bigdataproje
 ```
 
+### Windows kullanıcıları
+
+Bash script'leri ve `make` Windows native değil. Önerilen: **WSL2 + Docker Desktop**.
+
+```powershell
+wsl --install -d Ubuntu-24.04
+```
+
+Repoyu WSL filesystem'i içine klonla (Windows path'i değil — `C:/Users/...` 10x yavaş çalışır):
+
+```bash
+# WSL Ubuntu shell'de
+sudo apt install -y make git
+git clone https://github.com/bigdataKOU/bigdataproje.git
+cd bigdataproje && git checkout feat/pipeline-bootstrap
+```
+
+Buradan itibaren bütün komutlar aynı.
+
 ### 2. Hızlı doğrulama (disk yormadan)
 
 Tüm kodun sentaktik olarak sağlam olduğunu, dataset'in yerinde olduğunu kontrol et:
