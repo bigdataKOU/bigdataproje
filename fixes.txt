@@ -177,3 +177,13 @@ Cozum: `scripts/run_all.sh` artik bekleme sonrasi `SILVER_BATCH_ONCE=1` ile
 overwrite edilir. Canli streaming icin ayrica `make silver`.
 
 Etkilenen dosyalar: spark/jobs/silver_clean.py, scripts/run_all.sh
+
+9) run-all 5/9 silver batch'te takilma (cikti yok, uzun bekleme)
+----------------------------------------------------------------
+Kok neden: Arka plandaki bronze `spark-submit` Spark Standalone worker'da
+executor slotlarini tutuyor; silver ikinci `spark-submit` ile sira bekliyor.
+
+Cozum: Silver oncesi pipeline icinde `pkill -f spark-submit`; silver batch
+icinde `SPARK_MASTER_URL=local[*]` (tek JVM, kuyruk yok).
+
+Etkilenen dosyalar: scripts/run_all.sh, spark/jobs/silver_clean.py

@@ -113,6 +113,10 @@ def upsert_to_silver(spark: SparkSession, movies: DataFrame):
 
 def main_batch_once() -> int:
     """Bronze Delta'yi batch okuyup silver'i overwrite eder (run_all guvencesi)."""
+    # Standalone'da arka plandaki bronze tum executor'lari tutarken ikinci
+    # spark-submit (bu job) suresiz kuyrukta kalabiliyor; batch tek JVM'de bitsin.
+    os.environ["SPARK_MASTER_URL"] = "local[*]"
+    print("[silver-batch] Spark master=local[*] (cluster ile executor cakismasin)", flush=True)
     spark = build_spark("silver-batch-once")
     spark.sparkContext.setLogLevel("WARN")
 
