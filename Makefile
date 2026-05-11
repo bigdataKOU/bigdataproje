@@ -47,19 +47,19 @@ producer:
 
 bronze:
 	docker compose up -d pipeline
-	docker compose exec pipeline /opt/app/run.sh /opt/app/jobs/bronze_ingest.py
+	docker compose exec pipeline bash /opt/app/run.sh /opt/app/jobs/bronze_ingest.py
 
 silver:
-	docker compose exec pipeline /opt/app/run.sh /opt/app/jobs/silver_clean.py
+	docker compose exec pipeline bash /opt/app/run.sh /opt/app/jobs/silver_clean.py
 
 gold:
-	docker compose exec pipeline /opt/app/run.sh /opt/app/jobs/gold_features.py
+	docker compose exec pipeline bash /opt/app/run.sh /opt/app/jobs/gold_features.py
 
 train:
-	docker compose exec pipeline /opt/app/run.sh /opt/app/ml/train_als.py
+	docker compose exec pipeline bash /opt/app/run.sh /opt/app/ml/train_als.py
 
 inference:
-	docker compose exec pipeline /opt/app/run.sh /opt/app/ml/inference.py
+	docker compose exec pipeline bash /opt/app/run.sh /opt/app/ml/inference.py
 
 dashboard:
 	docker compose up -d dashboard

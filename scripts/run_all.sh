@@ -51,7 +51,7 @@ sleep 5
 
 # ---- 2. bronze streaming arka planda ----
 log "2/9  bronze ingest baslatiliyor (arka plan)"
-${DC} exec -d pipeline /opt/app/run.sh /opt/app/jobs/bronze_ingest.py \
+${DC} exec -d pipeline bash /opt/app/run.sh /opt/app/jobs/bronze_ingest.py \
     > "${ROOT}/logs-bronze.txt" 2>&1 || true
 sleep 3
 done_ "bronze running"
@@ -63,7 +63,7 @@ done_ "producer bitti"
 
 # ---- 4. silver streaming arka planda ----
 log "4/9  silver streaming baslatiliyor (arka plan)"
-${DC} exec -d pipeline /opt/app/run.sh /opt/app/jobs/silver_clean.py \
+${DC} exec -d pipeline bash /opt/app/run.sh /opt/app/jobs/silver_clean.py \
     > "${ROOT}/logs-silver.txt" 2>&1 || true
 sleep 3
 done_ "silver running"
@@ -74,18 +74,18 @@ sleep "${INGEST_WAIT_SECONDS}"
 
 # ---- 6. gold ----
 log "6/9  gold features (batch)"
-${EXEC} /opt/app/run.sh /opt/app/jobs/gold_features.py
+${EXEC} bash /opt/app/run.sh /opt/app/jobs/gold_features.py
 done_ "gold yazildi"
 
 # ---- 7. train ALS ----
 log "7/9  ALS egitim + MLflow"
 ${EXEC} env ALS_SAMPLE_FRACTION="${ALS_SAMPLE_FRACTION}" \
-    /opt/app/run.sh /opt/app/ml/train_als.py
+    bash /opt/app/run.sh /opt/app/ml/train_als.py
 done_ "ALS egitildi"
 
 # ---- 8. inference ----
 log "8/9  inference (top-N oneriler)"
-${EXEC} /opt/app/run.sh /opt/app/ml/inference.py
+${EXEC} bash /opt/app/run.sh /opt/app/ml/inference.py
 done_ "oneriler yazildi"
 
 # ---- 9. ozet ----
