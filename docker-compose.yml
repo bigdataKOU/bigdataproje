@@ -1,11 +1,14 @@
 name: bigdataproje
 
+# Delta / checkpoint / mlruns: named volume (bind mount degil) ki WSL2'de
+# root sahipli dosyalar ve `make clean` / `rm` izin sorunlari olusmasin;
+# `docker compose down -v` ile tam silinir.
 x-spark-volumes: &spark-volumes
   - ./spark:/opt/app
   - ${ML25M_DIR:-../ml-25m}:/opt/data/ml-25m:ro
-  - ./delta-store:/opt/delta
-  - ./checkpoints:/opt/checkpoints
-  - ./mlruns:/opt/mlruns
+  - delta-data:/opt/delta
+  - checkpoints-data:/opt/checkpoints
+  - mlruns-data:/opt/mlruns
   - ivy-cache:/opt/ivy-cache
 
 services:
@@ -70,8 +73,8 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      - ./mlruns:/opt/mlruns
-      - ./mlflow-store:/opt/mlflow-store
+      - mlruns-data:/opt/mlruns
+      - mlflow-store-data:/opt/mlflow-store
     environment:
       MLFLOW_BACKEND_STORE_URI: sqlite:////opt/mlflow-store/mlflow.db
       MLFLOW_DEFAULT_ARTIFACT_ROOT: /opt/mlruns
@@ -128,10 +131,14 @@ services:
       DATA_PATH: /opt/data
     volumes:
       - ./dashboard:/app
-      - ./delta-store:/opt/delta
+      - delta-data:/opt/delta
       - ${ML25M_DIR:-../ml-25m}:/opt/data/ml-25m:ro
-      - ./mlruns:/opt/mlruns
+      - mlruns-data:/opt/mlruns
 
 volumes:
   kafka-data:
   ivy-cache:
+  delta-data:
+  checkpoints-data:
+  mlruns-data:
+  mlflow-store-data:

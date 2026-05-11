@@ -140,3 +140,27 @@ Cozum:
   - Teşhis: `tail -f logs-bronze.txt` ve `tail -f logs-silver.txt`
 
 Etkilenen dosyalar: scripts/run_all.sh, fixes.txt
+
+
+7) make clean: rm ... Permission denied (delta-store / checkpoints / mlflow-store)
+----------------------------------------------------------------
+Belirtiler:
+  `make clean` veya `sudo make clean` sirasinda:
+    rm: cannot remove 'delta-store/...': Permission denied
+  Sonrasinda `make run-all` gold adiminda:
+    PATH_NOT_FOUND /opt/delta/silver/ratings
+
+Kok neden:
+  Eski kurulumda delta/checkpoint/mlruns host'a bind mount ediliyordu;
+  Spark root ile yazinca WSL2'de dosyalar root sahipli kaliyor, `rm`/`make clean`
+  ve hatta bazi ortamlarda alpine ile silme de izin hatasi verebiliyordu.
+
+Cozum:
+  docker-compose.yml bu verileri **named Docker volume**'lara tasir
+  (`delta-data`, `checkpoints-data`, `mlruns-data`, `mlflow-store-data`).
+  `make clean` sadece `docker compose down -v` calistirir; volume'lar tamamen
+  silinir, host izin sorunu kalmaz: `make clean && make run-all`
+  Eski `delta-store/` vb. klasorler hala diskteyse ve silinemiyorsa bir kez:
+  `sudo rm -rf delta-store checkpoints mlruns mlflow-store`
+
+Etkilenen dosyalar: docker-compose.yml, Makefile

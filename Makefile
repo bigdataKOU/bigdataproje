@@ -19,7 +19,7 @@ help:
 	@echo "  make dashboard   - Streamlit dashboard"
 	@echo "  make logs S=svc  - Servis loglari"
 	@echo "  make ps          - Servis durumu"
-	@echo "  make clean       - Tum delta + checkpoint + mlflow verisini sil"
+	@echo "  make clean       - Tum delta + checkpoint + mlflow verisini sil (compose down -v, named volume)"
 
 verify:
 	bash scripts/verify.sh
@@ -72,5 +72,7 @@ ps:
 	docker compose ps
 
 clean:
-	docker compose down -v
-	rm -rf delta-store/* checkpoints/* mlruns/* mlflow-store/*
+	docker compose down -v --remove-orphans 2>/dev/null || true
+	@# delta/checkpoint/mlruns/mlflow DB artik Docker named volume'da; down -v yeterli.
+	@# Eski surumden kalan host klasorleri (root sahipli) varsa bir kez: sudo rm -rf delta-store checkpoints mlruns mlflow-store
+	@-rm -rf delta-store checkpoints mlruns mlflow-store 2>/dev/null || true
