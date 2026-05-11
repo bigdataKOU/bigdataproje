@@ -196,3 +196,18 @@ Genelde 143 = 128+15 (SIGTERM). Yukaridaki `pkill -f spark-submit` + sh -c
 hatasi; duzeltme run_all.sh icerisinde.
 
 Etkilenen dosya: scripts/run_all.sh
+
+11) inference: ValueError: RDD is empty (load_model)
+----------------------------------------------------------------
+Belirti: `mlflow.spark.load_model("models:/.../1")` sirasinda
+`PipelineModel.load` / metadata okuma bos RDD.
+
+Kok neden: MLflow `models:` URI'sini Spark'in DFS'i ile cozmeye calisir;
+ortamda (ozellikle Standalone + paylasimli mlruns volume) bu yol bos
+donuyor.
+
+Cozum: `inference.py` artik registry'den run_id alip
+`artifact_uri/als_model` altindaki `sparkml` veya kokten
+`PipelineModel` / `ALSModel` ile `file://...` yolu yukler.
+
+Etkilenen dosya: spark/ml/inference.py
