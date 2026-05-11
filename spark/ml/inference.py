@@ -38,7 +38,7 @@ def _artifact_root_from_uri(artifact_uri: str) -> str:
     return raw
 
 
-def _local_als_model_candidates(client: mlflow.tracking.MlflowClient) -> list[str]:
+def _als_model_base_dir(client: mlflow.tracking.MlflowClient) -> str:
     if MODEL_STAGE and MODEL_STAGE != "None":
         mvs = client.get_latest_versions(MODEL_NAME, stages=[MODEL_STAGE])
         if not mvs:
@@ -57,12 +57,31 @@ def _local_als_model_candidates(client: mlflow.tracking.MlflowClient) -> list[st
     base = os.path.join(root, "als_model")
     if not os.path.isdir(base):
         raise RuntimeError(f"als_model yok: {base} (run_id={mv.run_id})")
-    sparkml = os.path.join(base, "sparkml")
-    out: list[str] = []
-    if os.path.isdir(sparkml):
-        out.append(sparkml)
-    out.append(base)
-    return out
+    return base
+
+
+def _dir_has_spark_metadata(dir_path: str) -> bool:
+    mp = os.path.join(dir_path, "metadata")
+    if not os.path.isdir(mp):
+        return False
+    try:
+        names = os.listdir(mp)
+    except OSError:
+        return False
+    if not names:
+        return False
+    return any(n.startswith("part-") for n in names) or ("metadata.json" in names)
+
+
+def _spark_ml_metadata_paths(als_model_base: str) -> list[str]:
+    """mlflow.spark.log_model: Spark okuma kokleri (metadata/part-* ile)."""
+    paths: list[str] = []
+    sm = os.path.join(als_model_base, "sparkml")
+    if _dir_has_spark_metadata(sm):
+        paths.append(sm)
+    if _dir_has_spark_metadata(als_model_base):
+        paths.append(als_model_base)
+    return paths
 
 
 def _file_uri(path: str) -> str:
@@ -72,24 +91,32 @@ def _file_uri(path: str) -> str:
 
 def load_als_for_inference(client: mlflow.tracking.MlflowClient):
     """Pipeline veya duz ALSModel; recommendForAllUsers donduren asama."""
+    base = _als_model_base_dir(client)
+    dirs = _spark_ml_metadata_paths(base)
+    if not dirs:
+        listing = sorted(os.listdir(base)) if os.path.isdir(base) else []
+        raise RuntimeError(
+            f"als_model icinde Spark metadata/ bulunamadi: {base} | oge: {listing}"
+        )
+
     last_err: Optional[Exception] = None
-    for d in _local_als_model_candidates(client):
+    for d in dirs:
         uri = _file_uri(d)
         try:
             m = PipelineModel.load(uri)
             for s in m.stages:
                 if isinstance(s, ALSModel):
-                    print(f"[inference] PipelineModel.load -> ALSModel ({uri})", flush=True)
+                    print(f"[inference] PipelineModel -> ALSModel ({d})", flush=True)
                     return s
         except Exception as e:
             last_err = e
         try:
             m = ALSModel.load(uri)
-            print(f"[inference] ALSModel.load ({uri})", flush=True)
+            print(f"[inference] ALSModel.load ({d})", flush=True)
             return m
         except Exception as e:
             last_err = e
-    raise RuntimeError("Spark ALS modeli yuklenemedi") from last_err
+    raise RuntimeError(f"Spark ALS yuklenemedi (metadata yolları: {dirs})") from last_err
 
 
 def main() -> int:

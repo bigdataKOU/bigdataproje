@@ -211,3 +211,7 @@ Cozum: `inference.py` artik registry'den run_id alip
 `PipelineModel` / `ALSModel` ile `file://...` yolu yukler.
 
 Etkilenen dosya: spark/ml/inference.py
+
+  Ek: ALSModel.load `als_model/` kokune uygulanirsa `als_model/metadata`
+  aranir; MLflow ciktisi `als_model/sparkml/metadata` altinda oldugundan
+  yalnizca metadata iceren dizinler denenmeli (inference.py guncel).
