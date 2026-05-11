@@ -5,12 +5,14 @@
 #   1. Servisleri baslat (kafka, spark cluster, mlflow, pipeline, dashboard)
 #   2. Bronze streaming job'i pipeline icinde arka planda baslat
 #   3. Producer'i calistir (PRODUCER_MAX_RECORDS kadar mesaj basar)
-#   4. Silver streaming job'i pipeline icinde arka planda baslat
-#   5. INGEST_WAIT_SECONDS bekle (silver trigger 20 sn; bronze 10 sn)
+#   4. INGEST_WAIT_SECONDS bekle (bronze Delta trigger 10 sn)
+#   5. Silver tek sefer batch (SILVER_BATCH_ONCE) — gold icin tablo garantisi
 #   6. Gold batch job
 #   7. ALS train
 #   8. Inference
 #   9. Ozet (URL'ler ve son durum)
+#
+# Not: Canli streaming silver icin ayri terminalde `make silver`.
 #
 # Kullanim:
 #   bash scripts/run_all.sh                         # default 50K records, fixed 1000/s
@@ -65,16 +67,15 @@ log "3/9  producer (max=${PRODUCER_MAX_RECORDS} mode=${PRODUCER_MODE})"
 ${DC} run --rm producer
 done_ "producer bitti"
 
-# ---- 4. silver streaming arka planda ----
-log "4/9  silver streaming baslatiliyor (arka plan)"
-${DC} exec -d pipeline bash /opt/app/run.sh /opt/app/jobs/silver_clean.py \
-    > "${ROOT}/logs-silver.txt" 2>&1 || true
-sleep 3
-done_ "silver running"
-
-# ---- 5. veri birikmesi icin bekle ----
-log "5/9  ${INGEST_WAIT_SECONDS} sn bronze/silver birikmesi"
+# ---- 4. bronze'un Delta'ya flush etmesi icin bekle ----
+log "4/9  ${INGEST_WAIT_SECONDS} sn bronze birikmesi (streaming trigger)"
 sleep "${INGEST_WAIT_SECONDS}"
+
+# ---- 5. silver batch (streaming mikro-batch gold'dan once yetismeyebiliyor) ----
+log "5/9  silver (batch, SILVER_BATCH_ONCE)"
+${EXEC} env SILVER_BATCH_ONCE=1 bash /opt/app/run.sh /opt/app/jobs/silver_clean.py \
+    > "${ROOT}/logs-silver-batch.txt" 2>&1
+done_ "silver tablosu yazildi"
 
 # ---- 6. gold ----
 log "6/9  gold features (batch)"
@@ -100,8 +101,8 @@ echo "  MLflow UI : http://localhost:5000"
 echo "  Spark UI  : http://localhost:8080"
 echo
 echo "  Loglar:"
-echo "    bronze    -> tail -f ${ROOT}/logs-bronze.txt"
-echo "    silver    -> tail -f ${ROOT}/logs-silver.txt"
+echo "    bronze       -> tail -f ${ROOT}/logs-bronze.txt"
+echo "    silver batch -> tail -f ${ROOT}/logs-silver-batch.txt"
 echo "    pipeline  -> docker compose logs -f pipeline"
 echo
 echo "  Streaming job'lari durdurmak icin:"

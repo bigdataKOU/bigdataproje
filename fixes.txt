@@ -164,3 +164,16 @@ Cozum:
   `sudo rm -rf delta-store checkpoints mlruns mlflow-store`
 
 Etkilenen dosyalar: docker-compose.yml, Makefile
+
+8) gold: PATH_NOT_FOUND /opt/delta/silver/ratings (run-all)
+----------------------------------------------------------------
+Belirti: `make run-all` gold adiminda silver Delta yolu yok.
+
+Kok neden: Arka plandaki silver streaming, 20 sn trigger + bos micro-batch
+ile gold calismadan once tabloyu yazmayabiliyor.
+
+Cozum: `scripts/run_all.sh` artik bekleme sonrasi `SILVER_BATCH_ONCE=1` ile
+`silver_clean.py` batch modunda calistirir; bronze Delta okunup silver
+overwrite edilir. Canli streaming icin ayrica `make silver`.
+
+Etkilenen dosyalar: spark/jobs/silver_clean.py, scripts/run_all.sh
