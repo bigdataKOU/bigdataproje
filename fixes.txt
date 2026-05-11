@@ -115,3 +115,28 @@ Cikarim:
   - Pipeline image'i ozellikle agir; build'i tek seferlik yap, dockerhub'a
     push etmek (gelecek eklenecek) takim icinde re-build maliyetini sifirlar.
   - Local'de `docker system df` ile build cache izlenmeli.
+
+
+6) gold: PATH_NOT_FOUND /opt/delta/silver/ratings
+----------------------------------------------------------------
+Hata:
+  pyspark... AnalysisException: [PATH_NOT_FOUND] Path does not exist:
+  /opt/delta/silver/ratings
+
+Kok neden:
+  Silver Delta tablosu foreachBatch icinde ancak en az bir satir
+  geldiginde olusur (n==0 ise return). Bronze bos kalirsa veya silver
+  hic batch isleyemezse tablo yazilmaz.
+  Ayrica `make run-all` her calistiginda `exec -d` ile yeni bronze/silver
+  baslatilir; onceki Spark streaming surecleri pipeline container'da
+  calismaya devam ederse ayni checkpoint'e cakisma olabilir.
+  Eski Kafka/Delta checkpoint durumu da bronze'un yeni mesajlari
+  okumamasina yol acabilir.
+
+Cozum:
+  - Temiz koşu: `make down` sonra `make clean` (delta + checkpoint + mlruns).
+  - script: `run_all.sh` artik gold oncesi `docker compose restart pipeline`
+    ile eski Spark sureclerini temizler; INGEST_WAIT_SECONDS varsayilan 90 sn.
+  - Teşhis: `tail -f logs-bronze.txt` ve `tail -f logs-silver.txt`
+
+Etkilenen dosyalar: scripts/run_all.sh, fixes.txt

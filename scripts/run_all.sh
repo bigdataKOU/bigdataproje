@@ -6,7 +6,7 @@
 #   2. Bronze streaming job'i pipeline icinde arka planda baslat
 #   3. Producer'i calistir (PRODUCER_MAX_RECORDS kadar mesaj basar)
 #   4. Silver streaming job'i pipeline icinde arka planda baslat
-#   5. ~60 sn bekle (bronze + silver birikme)
+#   5. INGEST_WAIT_SECONDS bekle (silver trigger 20 sn; bronze 10 sn)
 #   6. Gold batch job
 #   7. ALS train
 #   8. Inference
@@ -27,8 +27,8 @@ cd "${ROOT}"
 : "${PRODUCER_MODE:=fixed}"
 : "${PRODUCER_RATE:=1000}"
 : "${ALS_SAMPLE_FRACTION:=1.0}"
-: "${INGEST_WAIT_SECONDS:=60}"
-export PRODUCER_MAX_RECORDS PRODUCER_MODE PRODUCER_RATE ALS_SAMPLE_FRACTION
+: "${INGEST_WAIT_SECONDS:=90}"
+export PRODUCER_MAX_RECORDS PRODUCER_MODE PRODUCER_RATE ALS_SAMPLE_FRACTION INGEST_WAIT_SECONDS
 
 DC="docker compose"
 EXEC="${DC} exec -T pipeline"
@@ -46,8 +46,12 @@ until ${DC} ps kafka --format json | grep -q '"Health":"healthy"'; do
 done
 done_ "kafka hazir"
 
-# pipeline icinde kucuk delay (ivy cache ilk kullanim icin warm-up)
-sleep 5
+# Onceki calistirmadan kalan arka plandaki Spark streaming sureclerini oldur;
+# ayni checkpoint'e iki bronze/silver yazmak silver/bronze'u bozabilir.
+log "pipeline restart (eski spark sureclerini temizler)"
+${DC} restart pipeline
+sleep 12
+done_ "pipeline ayakta"
 
 # ---- 2. bronze streaming arka planda ----
 log "2/9  bronze ingest baslatiliyor (arka plan)"
