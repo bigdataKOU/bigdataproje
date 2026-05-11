@@ -3,6 +3,8 @@ name: bigdataproje
 # Delta / checkpoint / mlruns: named volume (bind mount degil) ki WSL2'de
 # root sahipli dosyalar ve `make clean` / `rm` izin sorunlari olusmasin;
 # `docker compose down -v` ile tam silinir.
+# ./spark -> /opt/app: runtime'da image icindeki COPY jobs|ml|run.sh uzerine yazilir;
+# Python degisikligi icin host ./spark senkron olmali (build tek basina yetmez).
 x-spark-volumes: &spark-volumes
   - ./spark:/opt/app
   - ${ML25M_DIR:-../ml-25m}:/opt/data/ml-25m:ro

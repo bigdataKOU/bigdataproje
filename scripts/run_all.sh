@@ -88,14 +88,16 @@ ${EXEC} bash /opt/app/run.sh /opt/app/jobs/gold_features.py
 done_ "gold yazildi"
 
 # ---- 7. train ALS ----
+# spark://master + /opt/mlruns yerel yazimi bazen bozuk ALS artifact uretir;
+# run.sh SPARK_MASTER_URL'i submit oncesi okur — burada local[*] ver.
 log "7/9  ALS egitim + MLflow"
-${EXEC} env ALS_SAMPLE_FRACTION="${ALS_SAMPLE_FRACTION}" \
+${EXEC} env SPARK_MASTER_URL=local[*] ALS_SAMPLE_FRACTION="${ALS_SAMPLE_FRACTION}" \
     bash /opt/app/run.sh /opt/app/ml/train_als.py
 done_ "ALS egitildi"
 
 # ---- 8. inference ----
 log "8/9  inference (top-N oneriler)"
-${EXEC} bash /opt/app/run.sh /opt/app/ml/inference.py
+${EXEC} env SPARK_MASTER_URL=local[*] bash /opt/app/run.sh /opt/app/ml/inference.py
 done_ "oneriler yazildi"
 
 # ---- 9. ozet ----

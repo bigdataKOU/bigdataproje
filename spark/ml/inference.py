@@ -2,12 +2,16 @@
 MLflow registry'den ALS modeli yukleyip top-N onerileri batch olarak
 parquet/csv olarak yazar (dashboard'un okuyacagi yer).
 
-models:/... URI ile mlflow.spark.load_model Spark DFS uzerinden "sparkml"
-aramaya calisabiliyor ve bos RDD (ValueError) veriyor; bu yuzden son
-run'in artifact_uri + als_model klasorunden dosya yolu ile yuklenir.
+Oncelik: `mlflow.spark.load_model` ile `runs:/<run_id>/als_model` veya
+yerel `als_model` yolu (DFS staging: `als_model/_mlflow_dfs_tmp`).
+`models:/...` burada kullanilmaz (cluster DFS / bos RDD riski).
 
 Calistirma:
   /opt/app/run.sh /opt/app/ml/inference.py
+
+Docker compose'da pipeline varsayilan olarak spark://master kullanir; bu betik
+icin `SPARK_MASTER_URL=local[*]` ver (run_all.sh boyle cagirir). Aksi halde
+run.sh cluster master ile submit eder.
 """
 import os
 import sys
@@ -15,9 +19,10 @@ from typing import Optional
 from urllib.parse import urlparse
 
 import mlflow
+import mlflow.spark
 from pyspark.ml import PipelineModel
 from pyspark.ml.recommendation import ALSModel
-from pyspark.sql import functions as F
+from pyspark.sql import SparkSession, functions as F
 
 sys.path.insert(0, "/opt/app/jobs")
 from _session import build_spark, gold_movie_path  # noqa: E402
@@ -38,7 +43,9 @@ def _artifact_root_from_uri(artifact_uri: str) -> str:
     return raw
 
 
-def _als_model_base_dir(client: mlflow.tracking.MlflowClient) -> str:
+def _resolve_als_model_dir_and_run_id(
+    client: mlflow.tracking.MlflowClient,
+) -> tuple[str, str]:
     if MODEL_STAGE and MODEL_STAGE != "None":
         mvs = client.get_latest_versions(MODEL_NAME, stages=[MODEL_STAGE])
         if not mvs:
@@ -52,12 +59,13 @@ def _als_model_base_dir(client: mlflow.tracking.MlflowClient) -> str:
             raise RuntimeError(f"registry'de '{MODEL_NAME}' icin versiyon yok")
         mv = max(versions, key=lambda v: int(v.version))
 
-    run = client.get_run(mv.run_id)
+    run_id = mv.run_id
+    run = client.get_run(run_id)
     root = _artifact_root_from_uri(run.info.artifact_uri)
     base = os.path.join(root, "als_model")
     if not os.path.isdir(base):
-        raise RuntimeError(f"als_model yok: {base} (run_id={mv.run_id})")
-    return base
+        raise RuntimeError(f"als_model yok: {base} (run_id={run_id})")
+    return os.path.abspath(base), run_id
 
 
 def _metadata_dir_nonempty(metadata_dir: str) -> bool:
@@ -117,32 +125,58 @@ def _als_with_recommendations(loaded) -> Optional[object]:
     return None
 
 
-def load_als_for_inference(client: mlflow.tracking.MlflowClient):
-    """Pipeline veya duz ALSModel; recommendForAllUsers donduren asama."""
-    base = _als_model_base_dir(client)
+def load_als_for_inference(
+    client: mlflow.tracking.MlflowClient, spark: SparkSession
+) -> object:
+    """MLflow'un kaydettigi Spark modelini yukler; ALS oneri asamasini dondurur.
+
+    MLflow 2.x `spark.load_model` yalnizca (uri, dfs_tmpdir) alir; SparkContext
+    bu fonksiyondan once (bu `spark` oturumu ile) olusturulmus olmalidir.
+    """
+    _ = spark.sparkContext
+    base, run_id = _resolve_als_model_dir_and_run_id(client)
+    dfs_tmp = os.path.join(base, "_mlflow_dfs_tmp")
+    os.makedirs(dfs_tmp, exist_ok=True)
+
+    last_err: Optional[Exception] = None
+
+    # 1) MLflow resmi yukleyici (models: DFS sorununu runs:/ veya dosya yolu ile atlar)
+    for uri in (f"runs:/{run_id}/als_model", base):
+        try:
+            loaded = mlflow.spark.load_model(uri, dfs_tmpdir=dfs_tmp)
+            als = _als_with_recommendations(loaded)
+            if als is not None:
+                print(f"[inference] mlflow.spark.load_model ok uri={uri!r}", flush=True)
+                return als
+        except Exception as e:
+            last_err = e
+            print(
+                f"[inference] mlflow.spark.load_model skip uri={uri!r}: {e!r}",
+                flush=True,
+            )
+
+    # 2) Ham Spark ML (MLflow sarmalayıcısı dışı kalan düzen)
     dirs = _find_spark_ml_load_roots(base)
     if not dirs:
         listing = sorted(os.listdir(base)) if os.path.isdir(base) else []
         sm = os.path.join(base, "sparkml")
-        sm_list = (
-            sorted(os.listdir(sm)) if os.path.isdir(sm) else []
-        )
+        sm_list = sorted(os.listdir(sm)) if os.path.isdir(sm) else []
         raise RuntimeError(
             f"als_model icinde Spark yukleme yolu bulunamadi: {base} | oge: {listing} | "
             f"sparkml/: {sm_list}"
-        )
+        ) from last_err
 
-    last_err: Optional[Exception] = None
-    for d in dirs:
-        path = os.path.abspath(d)
+    for path in dirs:
+        path = os.path.abspath(path)
         try:
             m = PipelineModel.load(path)
             als = _als_with_recommendations(m)
             if als is not None:
-                print(f"[inference] PipelineModel yuklendi -> ALS ({path})", flush=True)
+                print(f"[inference] PipelineModel ({path})", flush=True)
                 return als
         except Exception as e:
             last_err = e
+            print(f"[inference] PipelineModel.load skip {path!r}: {e!r}", flush=True)
         try:
             m = ALSModel.load(path)
             als = _als_with_recommendations(m)
@@ -151,13 +185,12 @@ def load_als_for_inference(client: mlflow.tracking.MlflowClient):
                 return als
         except Exception as e:
             last_err = e
-    raise RuntimeError(f"Spark ALS yuklenemedi (yollar: {dirs})") from last_err
+            print(f"[inference] ALSModel.load skip {path!r}: {e!r}", flush=True)
+    raise RuntimeError(f"Spark ALS yuklenemedi (mlflow + yollar: {dirs})") from last_err
 
 
 def main() -> int:
-    # Standalone + dosya tabanli model: executor tarafinda bos stage/empty collection;
-    # inference tek JVM'de yeterli.
-    os.environ["SPARK_MASTER_URL"] = "local[*]"
+    # Spark master: run.sh submit oncesi SPARK_MASTER_URL okur (Makefile / run_all: local[*]).
     spark = build_spark("als-inference")
     spark.sparkContext.setLogLevel("WARN")
 
@@ -173,7 +206,7 @@ def main() -> int:
             flush=True,
         )
 
-    model = load_als_for_inference(client)
+    model = load_als_for_inference(client, spark)
 
     user_recs = model.recommendForAllUsers(TOP_K)
 

@@ -221,3 +221,25 @@ Etkilenen dosya: spark/ml/inference.py
   Ek3: `sparkml/stages/0_ALS_*` ayri PipelineModel.load edilmez (empty collection);
   yalnizca `als_model/sparkml`; ALS asama `recommendForAllUsers` ile bulunur;
   inference `SPARK_MASTER_URL=local[*]`.
+
+12) inference traceback eski satir / build Python'u guncellemez + empty collection
+----------------------------------------------------------------
+Belirti: `load_als_for_inference(client)` (spark parametresiz), satir numaralari
+repo'daki guncel `inference.py` ile uyusmuyor; veya `docker compose build`
+sonrasi container hala eski kod.
+
+Kok neden A: `docker-compose.yml` icinde `./spark:/opt/app` bind mount,
+image'daki `COPY ml/` dosyalarini calisma aninda eziyor. Guncel kod WSL'deki
+`./spark` altinda olmali; yalnizca build yetmez.
+
+Kok neden B: ALS egitimi `SPARK_MASTER_URL=spark://spark-master:7077` ile
+calisirken `mlflow.spark.log_model` ciktisi `/opt/mlruns` altinda bozuk
+kalabiliyor; yuklemede `UnsupportedOperationException: empty collection`.
+
+Cozum: `run.sh` master'i submit **oncesinde** okur; train ve inference icin
+`SPARK_MASTER_URL=local[*]` ver (`run_all.sh`, `Makefile` train/inference,
+veya manuel `docker compose exec -e SPARK_MASTER_URL='local[*]' ...`).
+Bozuk run varsa yeniden egitim sonra inference.
+
+Etkilenen dosyalar: docker-compose.yml (aciklama), scripts/run_all.sh,
+Makefile, spark/ml/inference.py (mlflow yukleme hata loglari).

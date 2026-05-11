@@ -56,10 +56,10 @@ gold:
 	docker compose exec pipeline bash /opt/app/run.sh /opt/app/jobs/gold_features.py
 
 train:
-	docker compose exec pipeline bash /opt/app/run.sh /opt/app/ml/train_als.py
+	docker compose exec -e SPARK_MASTER_URL='local[*]' pipeline bash /opt/app/run.sh /opt/app/ml/train_als.py
 
 inference:
-	docker compose exec pipeline bash /opt/app/run.sh /opt/app/ml/inference.py
+	docker compose exec -e SPARK_MASTER_URL='local[*]' pipeline bash /opt/app/run.sh /opt/app/ml/inference.py
 
 dashboard:
 	docker compose up -d dashboard
