@@ -72,10 +72,12 @@ log "4/9  ${INGEST_WAIT_SECONDS} sn bronze birikmesi (streaming trigger)"
 sleep "${INGEST_WAIT_SECONDS}"
 
 # ---- 5. silver batch (streaming mikro-batch gold'dan once yetismeyebiliyor) ----
-# Bronze arka planda spark-submit ile calisir; worker'daki slotlar doluyken
-# ikinci submit (silver) beklemeye dusebilir — once eski submit'leri oldur.
+# Bronze arka planda spark-submit ile calisir; worker slotlari doluyken silver bekleyebilir.
+# NOT: `sh -c 'pkill -f spark-submit'` KULLANMA — -c metninde "spark-submit" gecer,
+# pkill -f kendi sh surecini de eslestirip SIGTERM (make exit 143) verebilir.
 log "5/9  silver (batch, SILVER_BATCH_ONCE)"
-${DC} exec -T pipeline sh -c 'pkill -f spark-submit 2>/dev/null || true; sleep 4'
+${DC} exec -T pipeline pkill -f '[b]ronze_ingest.py' 2>/dev/null || true
+sleep 4
 ${EXEC} env SILVER_BATCH_ONCE=1 bash /opt/app/run.sh /opt/app/jobs/silver_clean.py \
     > "${ROOT}/logs-silver-batch.txt" 2>&1
 done_ "silver tablosu yazildi"

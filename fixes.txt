@@ -183,7 +183,16 @@ Etkilenen dosyalar: spark/jobs/silver_clean.py, scripts/run_all.sh
 Kok neden: Arka plandaki bronze `spark-submit` Spark Standalone worker'da
 executor slotlarini tutuyor; silver ikinci `spark-submit` ile sira bekliyor.
 
-Cozum: Silver oncesi pipeline icinde `pkill -f spark-submit`; silver batch
-icinde `SPARK_MASTER_URL=local[*]` (tek JVM, kuyruk yok).
+Cozum: Silver oncesi bronze surecini `pkill -f '[b]ronze_ingest.py'` ile oldur
+(dogrudan exec argv; `sh -c 'pkill -f spark-submit'` kullanma: -c metni
+spark-submit icerdiginden pkill kendi kabugunu da vurup make **143** verebilir).
+Silver batch ayrica `SPARK_MASTER_URL=local[*]`.
 
 Etkilenen dosyalar: scripts/run_all.sh, spark/jobs/silver_clean.py
+
+10) make run-all Error 143 (silver adimi)
+----------------------------------------------------------------
+Genelde 143 = 128+15 (SIGTERM). Yukaridaki `pkill -f spark-submit` + sh -c
+hatasi; duzeltme run_all.sh icerisinde.
+
+Etkilenen dosya: scripts/run_all.sh
