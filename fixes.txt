@@ -218,3 +218,6 @@ Etkilenen dosya: spark/ml/inference.py
   Ek2: metadata icinde yalnizca `part-*`/`metadata.json` aramak bazi
   kayitlarda yetmez; `os.walk` + bos olmayan metadata/ + gerekirse
   `sparkml` son care denemesi (inference.py).
+  Ek3: `sparkml/stages/0_ALS_*` ayri PipelineModel.load edilmez (empty collection);
+  yalnizca `als_model/sparkml`; ALS asama `recommendForAllUsers` ile bulunur;
+  inference `SPARK_MASTER_URL=local[*]`.

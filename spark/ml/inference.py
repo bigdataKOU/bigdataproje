@@ -72,14 +72,21 @@ def _metadata_dir_nonempty(metadata_dir: str) -> bool:
 
 
 def _find_spark_ml_load_roots(als_model_base: str) -> list[str]:
-    """als_model altinda metadata/ iceren tum Spark ML kok dizinleri (ic ice stages dahil)."""
+    """MLflow spark.log_model: yukleme kokleri. sparkml/stages/0_ALS_* ayri yuklenmez (bos stage)."""
     base = os.path.abspath(als_model_base)
+    sm = os.path.join(base, "sparkml")
+    if _metadata_dir_nonempty(os.path.join(sm, "metadata")):
+        return [sm]
+
     roots: list[str] = []
     if not os.path.isdir(base):
         return roots
 
+    stages_token = f"{os.sep}stages{os.sep}"
     max_depth = 12
     for root, dirs, _ in os.walk(base):
+        if stages_token in (root + os.sep):
+            continue
         rel = os.path.relpath(root, base)
         depth = 0 if rel == "." else rel.count(os.sep) + 1
         if depth > max_depth:
@@ -91,19 +98,23 @@ def _find_spark_ml_load_roots(als_model_base: str) -> list[str]:
         if _metadata_dir_nonempty(mp):
             roots.append(root)
 
-    # Sıra: daha sığ yollar önce; sparkml yalnizca walk hicbir sey bulmazsa sonda denenir
     roots = list(dict.fromkeys(roots))
     roots.sort(key=lambda p: (p.count(os.sep), len(p)))
-
-    sm = os.path.join(base, "sparkml")
     if os.path.isdir(sm) and sm not in roots:
         roots.append(sm)
     return roots
 
 
-def _file_uri(path: str) -> str:
-    ap = os.path.abspath(path)
-    return ap if ap.startswith("file:") else f"file://{ap}"
+def _als_with_recommendations(loaded) -> Optional[object]:
+    """Pipeline veya duz model; Java ALS sarmalayıcısinda isinstance guvenilir olmayabilir."""
+    if hasattr(loaded, "recommendForAllUsers"):
+        return loaded
+    stages = getattr(loaded, "stages", None)
+    if stages:
+        for s in stages:
+            if hasattr(s, "recommendForAllUsers"):
+                return s
+    return None
 
 
 def load_als_for_inference(client: mlflow.tracking.MlflowClient):
@@ -123,25 +134,30 @@ def load_als_for_inference(client: mlflow.tracking.MlflowClient):
 
     last_err: Optional[Exception] = None
     for d in dirs:
-        uri = _file_uri(d)
+        path = os.path.abspath(d)
         try:
-            m = PipelineModel.load(uri)
-            for s in m.stages:
-                if isinstance(s, ALSModel):
-                    print(f"[inference] PipelineModel -> ALSModel ({d})", flush=True)
-                    return s
+            m = PipelineModel.load(path)
+            als = _als_with_recommendations(m)
+            if als is not None:
+                print(f"[inference] PipelineModel yuklendi -> ALS ({path})", flush=True)
+                return als
         except Exception as e:
             last_err = e
         try:
-            m = ALSModel.load(uri)
-            print(f"[inference] ALSModel.load ({d})", flush=True)
-            return m
+            m = ALSModel.load(path)
+            als = _als_with_recommendations(m)
+            if als is not None:
+                print(f"[inference] ALSModel.load ({path})", flush=True)
+                return als
         except Exception as e:
             last_err = e
-    raise RuntimeError(f"Spark ALS yuklenemedi (metadata yolları: {dirs})") from last_err
+    raise RuntimeError(f"Spark ALS yuklenemedi (yollar: {dirs})") from last_err
 
 
 def main() -> int:
+    # Standalone + dosya tabanli model: executor tarafinda bos stage/empty collection;
+    # inference tek JVM'de yeterli.
+    os.environ["SPARK_MASTER_URL"] = "local[*]"
     spark = build_spark("als-inference")
     spark.sparkContext.setLogLevel("WARN")
 
