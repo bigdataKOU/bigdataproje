@@ -60,28 +60,45 @@ def _als_model_base_dir(client: mlflow.tracking.MlflowClient) -> str:
     return base
 
 
-def _dir_has_spark_metadata(dir_path: str) -> bool:
-    mp = os.path.join(dir_path, "metadata")
-    if not os.path.isdir(mp):
+def _metadata_dir_nonempty(metadata_dir: str) -> bool:
+    """Spark ML metadata/ icinde gercek dosya var mi (yalnizca .crc sayma)."""
+    if not os.path.isdir(metadata_dir):
         return False
     try:
-        names = os.listdir(mp)
+        names = [n for n in os.listdir(metadata_dir) if not n.startswith(".")]
     except OSError:
         return False
-    if not names:
-        return False
-    return any(n.startswith("part-") for n in names) or ("metadata.json" in names)
+    return any(not n.endswith(".crc") for n in names)
 
 
-def _spark_ml_metadata_paths(als_model_base: str) -> list[str]:
-    """mlflow.spark.log_model: Spark okuma kokleri (metadata/part-* ile)."""
-    paths: list[str] = []
-    sm = os.path.join(als_model_base, "sparkml")
-    if _dir_has_spark_metadata(sm):
-        paths.append(sm)
-    if _dir_has_spark_metadata(als_model_base):
-        paths.append(als_model_base)
-    return paths
+def _find_spark_ml_load_roots(als_model_base: str) -> list[str]:
+    """als_model altinda metadata/ iceren tum Spark ML kok dizinleri (ic ice stages dahil)."""
+    base = os.path.abspath(als_model_base)
+    roots: list[str] = []
+    if not os.path.isdir(base):
+        return roots
+
+    max_depth = 12
+    for root, dirs, _ in os.walk(base):
+        rel = os.path.relpath(root, base)
+        depth = 0 if rel == "." else rel.count(os.sep) + 1
+        if depth > max_depth:
+            dirs[:] = []
+            continue
+        if "metadata" not in dirs:
+            continue
+        mp = os.path.join(root, "metadata")
+        if _metadata_dir_nonempty(mp):
+            roots.append(root)
+
+    # Sıra: daha sığ yollar önce; sparkml yalnizca walk hicbir sey bulmazsa sonda denenir
+    roots = list(dict.fromkeys(roots))
+    roots.sort(key=lambda p: (p.count(os.sep), len(p)))
+
+    sm = os.path.join(base, "sparkml")
+    if os.path.isdir(sm) and sm not in roots:
+        roots.append(sm)
+    return roots
 
 
 def _file_uri(path: str) -> str:
@@ -92,11 +109,16 @@ def _file_uri(path: str) -> str:
 def load_als_for_inference(client: mlflow.tracking.MlflowClient):
     """Pipeline veya duz ALSModel; recommendForAllUsers donduren asama."""
     base = _als_model_base_dir(client)
-    dirs = _spark_ml_metadata_paths(base)
+    dirs = _find_spark_ml_load_roots(base)
     if not dirs:
         listing = sorted(os.listdir(base)) if os.path.isdir(base) else []
+        sm = os.path.join(base, "sparkml")
+        sm_list = (
+            sorted(os.listdir(sm)) if os.path.isdir(sm) else []
+        )
         raise RuntimeError(
-            f"als_model icinde Spark metadata/ bulunamadi: {base} | oge: {listing}"
+            f"als_model icinde Spark yukleme yolu bulunamadi: {base} | oge: {listing} | "
+            f"sparkml/: {sm_list}"
         )
 
     last_err: Optional[Exception] = None

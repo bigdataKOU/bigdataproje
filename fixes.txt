@@ -215,3 +215,6 @@ Etkilenen dosya: spark/ml/inference.py
   Ek: ALSModel.load `als_model/` kokune uygulanirsa `als_model/metadata`
   aranir; MLflow ciktisi `als_model/sparkml/metadata` altinda oldugundan
   yalnizca metadata iceren dizinler denenmeli (inference.py guncel).
+  Ek2: metadata icinde yalnizca `part-*`/`metadata.json` aramak bazi
+  kayitlarda yetmez; `os.walk` + bos olmayan metadata/ + gerekirse
+  `sparkml` son care denemesi (inference.py).
