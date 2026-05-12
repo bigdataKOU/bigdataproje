@@ -1,0 +1,146 @@
+name: bigdataproje
+
+# Delta / checkpoint / mlruns: named volume (bind mount degil) ki WSL2'de
+# root sahipli dosyalar ve `make clean` / `rm` izin sorunlari olusmasin;
+# `docker compose down -v` ile tam silinir.
+# ./spark -> /opt/app: runtime'da image icindeki COPY jobs|ml|run.sh uzerine yazilir;
+# Python degisikligi icin host ./spark senkron olmali (build tek basina yetmez).
+x-spark-volumes: &spark-volumes
+  - ./spark:/opt/app
+  - ${ML25M_DIR:-../ml-25m}:/opt/data/ml-25m:ro
+  - delta-data:/opt/delta
+  - checkpoints-data:/opt/checkpoints
+  - mlruns-data:/opt/mlruns
+  - ivy-cache:/opt/ivy-cache
+
+services:
+
+  kafka:
+    image: apache/kafka:3.9.0
+    container_name: kafka
+    ports:
+      - "9092:9092"
+      - "9094:9094"
+    environment:
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9094"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "PLAINTEXT"
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_NUM_PARTITIONS: "3"
+      KAFKA_LOG_DIRS: "/var/lib/kafka/data"
+      CLUSTER_ID: "bigdataproje-cluster-id"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+
+  spark-master:
+    image: apache/spark:3.5.8-python3
+    container_name: spark-master
+    user: "0:0"
+    environment:
+      SPARK_NO_DAEMONIZE: "true"
+      SPARK_MASTER_HOST: "spark-master"
+    ports:
+      - "7077:7077"
+      - "8080:8080"
+    command: ["/opt/spark/sbin/start-master.sh"]
+    volumes: *spark-volumes
+
+  spark-worker:
+    image: apache/spark:3.5.8-python3
+    container_name: spark-worker
+    user: "0:0"
+    depends_on:
+      - spark-master
+    environment:
+      SPARK_NO_DAEMONIZE: "true"
+      SPARK_WORKER_MEMORY: "4g"
+      SPARK_WORKER_CORES: "2"
+    command: ["/opt/spark/sbin/start-worker.sh", "spark://spark-master:7077"]
+    volumes: *spark-volumes
+
+  mlflow:
+    build: ./mlflow
+    container_name: mlflow
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlruns-data:/opt/mlruns
+      - mlflow-store-data:/opt/mlflow-store
+    environment:
+      MLFLOW_BACKEND_STORE_URI: sqlite:////opt/mlflow-store/mlflow.db
+      MLFLOW_DEFAULT_ARTIFACT_ROOT: /opt/mlruns
+
+  producer:
+    build: ./producer
+    container_name: producer
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKER: kafka:9092
+      KAFKA_TOPIC_RATINGS: ratings
+      RATINGS_PATH: /opt/data/ml-25m/ratings.csv
+      PRODUCER_MODE: ${PRODUCER_MODE:-fixed}
+      PRODUCER_RATE: ${PRODUCER_RATE:-1000}
+      PRODUCER_SPEEDUP: ${PRODUCER_SPEEDUP:-100000}
+      PRODUCER_MAX_RECORDS: ${PRODUCER_MAX_RECORDS:-500000}
+    volumes:
+      - ${ML25M_DIR:-../ml-25m}:/opt/data/ml-25m:ro
+    restart: "no"
+
+  pipeline:
+    build: ./spark
+    container_name: pipeline
+    depends_on:
+      kafka:
+        condition: service_healthy
+      spark-master:
+        condition: service_started
+      mlflow:
+        condition: service_started
+    environment:
+      KAFKA_BROKER: kafka:9092
+      KAFKA_TOPIC_RATINGS: ratings
+      SPARK_MASTER_URL: spark://spark-master:7077
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      DELTA_PATH: /opt/delta
+      CHECKPOINT_PATH: /opt/checkpoints
+      DATA_PATH: /opt/data
+    volumes: *spark-volumes
+    command: ["sleep", "infinity"]
+
+  dashboard:
+    build: ./dashboard
+    container_name: dashboard
+    depends_on:
+      - mlflow
+    ports:
+      - "8501:8501"
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      DELTA_PATH: /opt/delta
+      DATA_PATH: /opt/data
+    volumes:
+      - ./dashboard:/app
+      - delta-data:/opt/delta
+      - ${ML25M_DIR:-../ml-25m}:/opt/data/ml-25m:ro
+      - mlruns-data:/opt/mlruns
+
+volumes:
+  kafka-data:
+  ivy-cache:
+  delta-data:
+  checkpoints-data:
+  mlruns-data:
+  mlflow-store-data:
