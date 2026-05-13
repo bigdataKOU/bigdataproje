@@ -314,7 +314,12 @@ with tab_mlflow:
                     )
                 st.dataframe(df_display, use_container_width=True, hide_index=True)
 
-                tree_sweep = df[df["maxDepth"] == df["maxDepth"].mode().iloc[0]].sort_values("numTrees")
+                # maxDepth/numTrees tüm modellerde yok — boş mode() varsa atla
+                _md_mode = df["maxDepth"].dropna().mode()
+                tree_sweep = (
+                    df[df["maxDepth"] == _md_mode.iloc[0]].sort_values("numTrees")
+                    if not _md_mode.empty else pd.DataFrame()
+                )
                 if len(tree_sweep) >= 2:
                     col_a, col_b = st.columns(2)
                     with col_a:
@@ -330,7 +335,11 @@ with tab_mlflow:
                             use_container_width=True,
                         )
 
-                depth_sweep = df[df["numTrees"] == df["numTrees"].mode().iloc[0]].sort_values("maxDepth")
+                _nt_mode = df["numTrees"].dropna().mode()
+                depth_sweep = (
+                    df[df["numTrees"] == _nt_mode.iloc[0]].sort_values("maxDepth")
+                    if not _nt_mode.empty else pd.DataFrame()
+                )
                 if len(depth_sweep) >= 2:
                     col_c, col_d = st.columns(2)
                     with col_c:

@@ -319,32 +319,40 @@ def main() -> int:
         "n_rows": n_rows,
     }
 
+    # Hiperparametreler env'den override edilebilir
+    LR_MAX_ITER = int(os.environ.get("LR_MAX_ITER", "50"))
+    DT_MAX_DEPTH = int(os.environ.get("DT_MAX_DEPTH", "15"))
+    RF_NUM_TREES = int(os.environ.get("RF_NUM_TREES", "100"))
+    RF_MAX_DEPTH = int(os.environ.get("RF_MAX_DEPTH", "15"))
+    GBT_MAX_ITER = int(os.environ.get("GBT_MAX_ITER", "30"))
+    GBT_MAX_DEPTH = int(os.environ.get("GBT_MAX_DEPTH", "5"))
+
     models_to_train = [
         (
             "logistic_regression",
             LogisticRegression(
                 labelCol="label", featuresCol="features",
-                maxIter=20, regParam=0.0, elasticNetParam=0.0,
+                maxIter=LR_MAX_ITER, regParam=0.0, elasticNetParam=0.0,
                 family="multinomial",
             ),
-            {"maxIter": 20, "regParam": 0.0, "family": "multinomial"},
+            {"maxIter": LR_MAX_ITER, "regParam": 0.0, "family": "multinomial"},
         ),
         (
             "decision_tree",
             DecisionTreeClassifier(
                 labelCol="label", featuresCol="features",
-                maxDepth=10, maxBins=64, seed=42,
+                maxDepth=DT_MAX_DEPTH, maxBins=64, seed=42,
             ),
-            {"maxDepth": 10, "maxBins": 64},
+            {"maxDepth": DT_MAX_DEPTH, "maxBins": 64},
         ),
         (
             "random_forest",
             RandomForestClassifier(
                 labelCol="label", featuresCol="features",
-                numTrees=50, maxDepth=10, seed=42,
+                numTrees=RF_NUM_TREES, maxDepth=RF_MAX_DEPTH, seed=42,
                 featureSubsetStrategy="auto",
             ),
-            {"numTrees": 50, "maxDepth": 10},
+            {"numTrees": RF_NUM_TREES, "maxDepth": RF_MAX_DEPTH},
         ),
         (
             "gbt_ovr",
@@ -352,10 +360,11 @@ def main() -> int:
                 labelCol="label", featuresCol="features",
                 classifier=GBTClassifier(
                     labelCol="label", featuresCol="features",
-                    maxIter=20, maxDepth=5, seed=42,
+                    maxIter=GBT_MAX_ITER, maxDepth=GBT_MAX_DEPTH, seed=42,
                 ),
             ),
-            {"gbt_maxIter": 20, "gbt_maxDepth": 5, "wrapper": "OneVsRest"},
+            {"gbt_maxIter": GBT_MAX_ITER, "gbt_maxDepth": GBT_MAX_DEPTH,
+             "wrapper": "OneVsRest"},
         ),
         (
             "naive_bayes",

@@ -3,455 +3,722 @@
 <head>
 <meta charset="utf-8">
 <title>Chicago Crimes Pipeline — Sunum</title>
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5/dist/reset.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5/dist/reveal.css">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5/dist/theme/black.css" id="theme">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5/dist/theme/white.css" id="theme">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5/plugin/highlight/monokai.css">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 
 <style>
   :root {
-    --r-main-font: "Inter", sans-serif;
-    --r-heading-font: "Inter", sans-serif;
-    --r-heading-text-transform: none;
+    --primary: #667eea;
+    --primary-dark: #5a67d8;
+    --secondary: #764ba2;
+    --accent: #ed8936;
+    --success: #48bb78;
+    --bg: #f8fafc;
+    --text: #2d3748;
+    --text-light: #718096;
+    --border: #e2e8f0;
   }
-  .reveal { font-family: "Inter", sans-serif; }
-  .reveal h1, .reveal h2, .reveal h3 { font-weight: 800; letter-spacing: -0.01em; }
-  .reveal h1 { font-size: 2.5em; }
-  .reveal h2 { font-size: 1.8em; color: #f6e05e; }
-  .reveal h3 { font-size: 1.3em; color: #a0aec0; }
-  .reveal table { font-size: 0.7em; margin: 20px auto; }
-  .reveal table th {
-    background: linear-gradient(135deg, #667eea, #764ba2);
-    color: white; padding: 10px 16px; border: none;
+
+  /* Reset reveal.js defaults */
+  .reveal {
+    font-family: "Inter", -apple-system, sans-serif;
+    font-size: 30px;
+    color: var(--text);
+    background: var(--bg);
   }
-  .reveal table td { padding: 8px 14px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+  .reveal .slides { text-align: left; }
+  .reveal .slides section {
+    padding: 40px 50px !important;
+    height: 100%;
+  }
+  .reveal h1, .reveal h2, .reveal h3, .reveal h4 {
+    font-family: "Inter", sans-serif;
+    color: var(--text); text-transform: none;
+    margin: 0 0 0.5em; letter-spacing: -0.02em;
+    line-height: 1.1;
+  }
+  .reveal h1 { font-size: 1.8em; font-weight: 800; }
+  .reveal h2 {
+    font-size: 1.5em; font-weight: 800;
+    border-bottom: 4px solid var(--primary);
+    padding-bottom: 0.3em; margin-bottom: 0.6em;
+    display: inline-block;
+  }
+  .reveal h3 { font-size: 1.0em; font-weight: 700; color: var(--primary-dark); }
+  .reveal p { font-size: 0.7em; line-height: 1.5; margin: 0.4em 0; }
+  .reveal ul, .reveal ol { font-size: 0.7em; line-height: 1.7; margin: 0.5em 0; }
+  .reveal ul li, .reveal ol li { margin: 0.3em 0; }
+  .reveal a { color: var(--primary); text-decoration: none; }
+  .reveal a:hover { text-decoration: underline; }
   .reveal code {
-    background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 4px;
-    font-size: 0.85em; color: #f6e05e;
+    font-family: "JetBrains Mono", monospace;
+    background: #edf2f7; color: #4a5568;
+    padding: 2px 8px; border-radius: 4px; font-size: 0.9em;
   }
   .reveal pre {
-    box-shadow: 0 8px 24px rgba(0,0,0,0.5); border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    border-radius: 8px; font-size: 0.55em;
+    background: #1a202c; color: #e2e8f0;
+    padding: 18px 22px;
   }
-  .reveal ul li { margin: 12px 0; line-height: 1.5; }
-  .reveal .progress { color: #667eea; }
+  .reveal pre code { background: transparent; color: inherit; padding: 0; }
+
+  /* Tables */
+  .reveal table {
+    font-size: 0.6em; margin: 15px 0;
+    border-collapse: separate; border-spacing: 0;
+    background: white; border-radius: 10px; overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    width: 100%;
+  }
+  .reveal table th {
+    background: linear-gradient(135deg, var(--primary), var(--secondary));
+    color: white; padding: 12px 16px; border: none;
+    font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.5px; font-size: 0.85em;
+  }
+  .reveal table td {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+  }
+  .reveal table tr:last-child td { border-bottom: none; }
+  .reveal table tr.winner-row td {
+    background: linear-gradient(90deg, #fef3c7, #fde68a);
+    font-weight: 600;
+  }
+  .crown { font-size: 1.2em; vertical-align: middle; margin-right: 4px; }
+
+  /* === SLIDE-SPECIFIC STYLES === */
 
   /* Title slide */
   .title-slide {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white; padding: 60px 80px;
-    border-radius: 20px;
+    background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+    color: white; padding: 60px 70px;
+    border-radius: 24px; height: 100%;
+    display: flex; flex-direction: column; justify-content: center;
+    box-shadow: 0 25px 50px -12px rgba(102, 126, 234, 0.5);
   }
-  .title-slide h1 { font-size: 2.2em; margin-bottom: 12px; }
-  .title-slide .subtitle { font-size: 1.1em; opacity: 0.95; margin-bottom: 40px; }
+  .title-slide .pre-title {
+    font-size: 0.5em; letter-spacing: 4px; opacity: 0.85;
+    text-transform: uppercase; font-weight: 600;
+    margin-bottom: 25px;
+  }
+  .title-slide h1 {
+    color: white; font-size: 2.4em; line-height: 1.05;
+    font-weight: 900; margin-bottom: 20px;
+  }
+  .title-slide .subtitle {
+    font-size: 0.7em; opacity: 0.95; line-height: 1.4;
+    margin-bottom: 35px;
+  }
   .title-slide .meta {
-    background: rgba(0,0,0,0.2); border-radius: 14px; padding: 20px 30px;
-    text-align: left; font-size: 0.85em;
+    background: rgba(0,0,0,0.2); border-radius: 16px;
+    padding: 22px 28px; backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.15);
+    font-size: 0.55em; line-height: 1.7;
   }
+  .title-slide .meta-row { display: flex; justify-content: space-between; margin: 4px 0; }
+  .title-slide .meta-label { opacity: 0.8; }
+  .title-slide .meta-value { font-weight: 600; }
 
-  /* KPI grid for stats slide */
+  /* Stat grid (KPI cards) */
   .stat-grid {
-    display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px;
-    margin-top: 30px;
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 22px; margin-top: 25px;
   }
   .stat-card {
-    background: rgba(102, 126, 234, 0.15);
-    border: 1px solid rgba(102, 126, 234, 0.3);
-    border-radius: 14px; padding: 24px;
-    backdrop-filter: blur(10px);
+    background: white; border-radius: 14px;
+    padding: 22px 24px; text-align: left;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    border-top: 4px solid var(--primary);
+    transition: transform 0.2s;
   }
-  .stat-card .icon { font-size: 2em; margin-bottom: 8px; }
+  .stat-card:nth-child(1) { border-top-color: #667eea; }
+  .stat-card:nth-child(2) { border-top-color: #f56565; }
+  .stat-card:nth-child(3) { border-top-color: #48bb78; }
+  .stat-card:nth-child(4) { border-top-color: #ed8936; }
+  .stat-card:nth-child(5) { border-top-color: #38b2ac; }
+  .stat-card:nth-child(6) { border-top-color: #9f7aea; }
+  .stat-card .icon { font-size: 1.5em; }
   .stat-card .label {
-    font-size: 0.75em; opacity: 0.7; text-transform: uppercase;
-    letter-spacing: 1px; margin-bottom: 6px;
+    font-size: 0.5em; color: var(--text-light);
+    text-transform: uppercase; letter-spacing: 1px;
+    margin-top: 8px; font-weight: 600;
   }
-  .stat-card .value { font-size: 1.7em; font-weight: 800; color: #f6e05e; }
+  .stat-card .value {
+    font-size: 1.2em; font-weight: 800;
+    color: var(--text); margin-top: 6px;
+    line-height: 1.1;
+  }
 
   /* Architecture diagram */
-  .arch {
-    background: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 12px;
-    padding: 24px;
+  .arch-diagram {
+    background: #1a202c; color: #e2e8f0;
+    border-radius: 12px; padding: 24px 30px;
     font-family: "JetBrains Mono", monospace;
-    font-size: 0.6em; line-height: 1.4;
-    text-align: left; white-space: pre;
+    font-size: 0.42em; line-height: 1.5;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+    overflow-x: auto;
+    white-space: pre;
   }
+  .arch-diagram .arrow { color: #f6e05e; }
+  .arch-diagram .layer { color: #90cdf4; font-weight: 700; }
 
   /* Step cards */
   .step-grid {
-    display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px;
-    margin-top: 22px;
+    display: grid; grid-template-columns: repeat(2, 1fr);
+    gap: 16px; margin-top: 18px;
   }
   .step-card {
-    background: linear-gradient(135deg, rgba(102,126,234,0.15), rgba(118,75,162,0.15));
-    border-radius: 12px; padding: 16px 20px; text-align: left;
-    border-left: 4px solid #f6e05e;
+    background: white; border-radius: 12px;
+    padding: 16px 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    border-left: 5px solid var(--primary);
   }
-  .step-card .num { color: #f6e05e; font-weight: 700; font-size: 0.85em; }
-  .step-card .title { font-weight: 700; margin: 6px 0 4px; }
-  .step-card .desc { font-size: 0.65em; opacity: 0.8; line-height: 1.4; }
+  .step-card.wide { grid-column: span 2; }
+  .step-card .num {
+    color: var(--primary); font-weight: 700;
+    font-size: 0.5em; text-transform: uppercase;
+    letter-spacing: 1.5px;
+  }
+  .step-card .title-h {
+    font-weight: 700; font-size: 0.75em;
+    margin: 4px 0 6px; color: var(--text);
+  }
+  .step-card .desc {
+    font-size: 0.55em; color: var(--text-light);
+    line-height: 1.5;
+  }
 
-  /* Speaker notes hint */
-  .hint {
-    position: fixed; bottom: 10px; left: 10px;
-    background: rgba(0,0,0,0.6); color: white;
-    padding: 6px 12px; border-radius: 6px;
-    font-size: 0.65em; opacity: 0.5; z-index: 100;
+  /* Winner banner */
+  .winner-banner {
+    background: linear-gradient(135deg, var(--success) 0%, #2f855a 100%);
+    color: white; padding: 22px 30px;
+    border-radius: 16px; margin-top: 20px;
+    display: flex; gap: 22px; align-items: center;
+    box-shadow: 0 10px 30px rgba(72, 187, 120, 0.3);
   }
+  .winner-icon { font-size: 3em; }
+  .winner-label {
+    font-size: 0.5em; opacity: 0.85;
+    text-transform: uppercase; letter-spacing: 2px;
+  }
+  .winner-name {
+    font-size: 1.4em; font-weight: 900; margin: 4px 0;
+  }
+  .winner-stats {
+    display: flex; gap: 24px; font-size: 0.55em; opacity: 0.95;
+  }
+  .winner-stats b { font-weight: 700; }
+
+  /* Rank list */
+  .rank-list { margin-top: 24px; }
+  .rank-item {
+    display: flex; align-items: center; gap: 18px;
+    background: white; padding: 14px 22px;
+    border-radius: 12px; margin: 10px 0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    font-size: 0.75em;
+  }
+  .rank-item .medal { font-size: 1.8em; }
+  .rank-item .rank-num {
+    font-size: 0.6em; color: var(--text-light);
+    font-weight: 500; margin-top: 3px;
+  }
+
+  /* Feature pills */
+  .feature-pills {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    margin: 16px 0;
+  }
+  .feature-pill {
+    background: linear-gradient(135deg, var(--primary), var(--secondary));
+    color: white; padding: 8px 16px;
+    border-radius: 999px; font-size: 0.6em;
+    font-weight: 500;
+  }
+
+  /* Two-column layout */
+  .two-col {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 24px; margin-top: 20px;
+  }
+  .col-card {
+    background: white; border-radius: 12px;
+    padding: 18px 22px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }
+  .col-card h3 { margin-top: 0; }
+
+  /* Q&A slide */
+  .qa-slide {
+    text-align: center; padding-top: 60px !important;
+  }
+  .qa-slide .qa-mark { font-size: 8em; line-height: 1; }
+  .qa-slide h1 { font-size: 3em; color: var(--primary); margin: 30px 0 20px; }
+  .qa-slide p { font-size: 0.7em; color: var(--text-light); }
 
   /* Thanks slide */
   .thanks-slide {
-    text-align: center;
+    text-align: center; padding-top: 50px !important;
+    background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+    color: white; border-radius: 0;
   }
+  .thanks-slide .icon { font-size: 6em; line-height: 1; }
   .thanks-slide .thanks-text {
-    font-size: 4em; font-weight: 900;
-    background: linear-gradient(135deg, #f6e05e, #ed8936);
+    font-size: 4em; font-weight: 900; margin: 25px 0 20px;
+    background: linear-gradient(135deg, #fde68a, #fbbf24);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
-    margin: 30px 0;
+  }
+  .thanks-slide p { font-size: 0.7em; opacity: 0.95; line-height: 1.6; max-width: 700px; margin: 12px auto; }
+  .thanks-slide .signature { opacity: 0.75; font-size: 0.6em; margin-top: 30px; }
+
+  /* Compact list with icons */
+  .icon-list { margin: 16px 0; }
+  .icon-item {
+    display: flex; gap: 14px; align-items: flex-start;
+    margin: 12px 0; font-size: 0.65em;
+  }
+  .icon-item .ico {
+    font-size: 1.4em; line-height: 1.2; flex-shrink: 0;
+  }
+  .icon-item .txt b { color: var(--text); }
+  .icon-item .txt small { display: block; color: var(--text-light); font-size: 0.9em; margin-top: 3px; }
+
+  /* PDF badge */
+  .badge {
+    display: inline-block;
+    background: var(--primary); color: white;
+    padding: 3px 12px; border-radius: 999px;
+    font-size: 0.45em; font-weight: 700;
+    vertical-align: middle; margin-left: 10px;
+    text-transform: uppercase; letter-spacing: 1px;
   }
 
-  .badge-pdf {
-    display: inline-block; background: #667eea; padding: 3px 12px;
-    border-radius: 999px; font-size: 0.5em; vertical-align: middle;
-    margin-left: 10px; font-weight: 700;
+  /* Footer hint */
+  .footer-hint {
+    position: fixed; bottom: 12px; left: 14px;
+    background: rgba(0,0,0,0.55); color: white;
+    padding: 7px 14px; border-radius: 6px;
+    font-size: 11px; opacity: 0.7; z-index: 100;
+    font-family: "Inter", sans-serif;
   }
+
+  .reveal .progress { color: var(--primary); }
+  .reveal .controls { color: var(--primary); }
 </style>
 </head>
 <body>
 
-<div class="hint">← → veya Space ile ilerle · S = notlar · ESC = slayt görünümü · F = tam ekran</div>
+<div class="footer-hint">← → Space — gezinme &middot; S — speaker notes &middot; ESC — overview &middot; F — fullscreen</div>
 
 <div class="reveal">
 <div class="slides">
 
-<!-- ========== Slide 1: Title ========== -->
+<!-- ========== Slayt 1: Kapak ========== -->
 <section>
   <div class="title-slide">
-    <div style="font-size:0.75em;opacity:0.85;letter-spacing:2px;margin-bottom:10px;">📊 BLM442 · DÖNEM PROJESİ</div>
-    <h1>Chicago Crimes —<br>Uçtan Uca Büyük Veri Pipeline'ı</h1>
-    <div class="subtitle">Apache Kafka · Spark · Delta Lake · 5 ML Modeli · MLflow · Streamlit</div>
+    <div class="pre-title">📊 BLM442 · Dönem Projesi</div>
+    <h1>Chicago Crimes<br><span style="opacity:0.85;font-weight:600;">Uçtan Uca Büyük Veri Pipeline'ı</span></h1>
+    <div class="subtitle">
+      Apache Kafka · Spark Structured Streaming · Delta Lake<br>
+      5 ML Modeli · MLflow · Streamlit
+    </div>
     <div class="meta">
-      <div style="font-size:0.95em;font-weight:700;margin-bottom:8px;">🎓 Kocaeli Üniversitesi · Bilgisayar Mühendisliği</div>
-      <div style="opacity:0.9;">Dr. Ayşe Gül Eker · 2025-2026 Bahar · 13 May 2026</div>
-      <hr style="border:0;border-top:1px solid rgba(255,255,255,0.2);margin:14px 0;">
-      <div style="font-size:0.85em;line-height:1.7;">
-        <b>Takım:</b> Emre Aytaş (220202098) · Hatice Kübra Kılıçaslan (220202077)<br>
-        Berker Yiğit (220202046) · Mertcan Kuzey (240202009)
+      <div class="meta-row"><span class="meta-label">Üniversite</span><span class="meta-value">Kocaeli Üniversitesi</span></div>
+      <div class="meta-row"><span class="meta-label">Bölüm</span><span class="meta-value">Bilgisayar Mühendisliği</span></div>
+      <div class="meta-row"><span class="meta-label">Öğretim Üyesi</span><span class="meta-value">Dr. Ayşe Gül Eker</span></div>
+      <div class="meta-row"><span class="meta-label">Dönem</span><span class="meta-value">2025–2026 Bahar · 13 May 2026</span></div>
+      <hr style="border:0;border-top:1px solid rgba(255,255,255,0.18);margin:14px 0;">
+      <div style="line-height:1.7;">
+        <b style="opacity:0.9;">Takım:</b><br>
+        Emre Aytaş <span style="opacity:0.7">(220202098)</span> &middot;
+        Hatice Kübra Kılıçaslan <span style="opacity:0.7">(220202077)</span><br>
+        Berker Yiğit <span style="opacity:0.7">(220202046)</span> &middot;
+        Mertcan Kuzey <span style="opacity:0.7">(240202009)</span>
       </div>
     </div>
   </div>
   <aside class="notes">
-    Hoş geldiniz. 10-15 dakikalık bir sunum yapacağız: Chicago Crimes 2001-Present veriseti üzerinde
-    PDF'in 7 adımının her birini somut bileşenlerle gerçekleştirdik.
+    Hoş geldiniz. 10-15 dakikalık bir sunum yapacağız. Chicago Crimes veriseti
+    üzerinde PDF'in 7 adımının her birini somut bileşenlerle gerçekleştirdik.
   </aside>
 </section>
 
-<!-- ========== Slide 2: Problem & Dataset ========== -->
+<!-- ========== Slayt 2: Problem ========== -->
 <section>
   <h2>Problem ve Veri Seti</h2>
-  <div style="text-align:left;font-size:0.85em;line-height:1.8;">
-    <p><b>Veri seti:</b> <a href="https://data.cityofchicago.org/Public-Safety/Crimes-2001-to-Present/ijzp-q8t2" style="color:#f6e05e;">Chicago Crimes 2001–Present</a> — Chicago Police CLEAR sistemi</p>
-    <ul>
-      <li><b>~7.9 milyon olay</b>, 23 yıl, 22 kolon</li>
-      <li>Kolonlar: ID, Date, Block, Primary Type, District, Ward, Beat, Lat/Lon, Arrest, Domestic ...</li>
-      <li><b>Görev:</b> Çoklu sınıf <code>Primary Type</code> sınıflandırması (PDF: "suç tipi ve bölge tahmini")</li>
-      <li>35+ suç tipi var → Top-5 + OTHER = 6 dengeli sınıf</li>
-    </ul>
+  <div class="icon-list">
+    <div class="icon-item">
+      <div class="ico">📍</div>
+      <div class="txt"><b>Chicago Crimes 2001–Present</b> — Chicago Police CLEAR sistemi
+        <small>data.cityofchicago.org · ~7.9 milyon olay · 23 yıllık tarihçe</small></div>
+    </div>
+    <div class="icon-item">
+      <div class="ico">📋</div>
+      <div class="txt"><b>22 kolon</b> — ID, Date, Block, Primary Type, District, Ward, Beat, Lat/Lon, Arrest, Domestic, FBI Code
+        <small>35+ farklı suç tipi var; dağılım dengesiz (THEFT %22, ARSON %0.1)</small></div>
+    </div>
+    <div class="icon-item">
+      <div class="ico">🎯</div>
+      <div class="txt"><b>ML görevi:</b> Çoklu sınıf <code>Primary Type</code> tahmin
+        <small>PDF metni: "suç tipi ve bölge tahmini"</small></div>
+    </div>
+    <div class="icon-item">
+      <div class="ico">⚖️</div>
+      <div class="txt"><b>Strateji:</b> Top-5 sınıf + OTHER → 6 dengeli sınıf
+        <small>Aşırı dengesiz dağılım yerine anlamlı karşılaştırma</small></div>
+    </div>
   </div>
   <aside class="notes">
-    Chicago polisinin CLEAR sisteminden gerçek dünya verisi. 2001'den günümüze 7.9 milyon olay.
-    Sınıf dengesizliği problemi var (THEFT %22, ARSON %0.1), bu yüzden top-5 + OTHER yaklaşımı.
+    Chicago polisinin gerçek dünya verisi. Top-5 + OTHER yaklaşımı ile sınıf
+    dengesizliğini yönetilebilir hale getirdik.
   </aside>
 </section>
 
-<!-- ========== Slide 3: Data Summary (live KPI) ========== -->
+<!-- ========== Slayt 3: Canlı veri özeti ========== -->
 <section>
-  <h2>Veri Özeti <span class="badge-pdf">Canlı veri</span></h2>
+  <h2>Veri Özeti <span class="badge">Canlı veri</span></h2>
+  <p style="color:var(--text-light); font-size:0.6em; margin-top:-6px;">
+    Bu sayılar MLflow + EDA özetinden otomatik olarak çekildi.
+  </p>
   <div class="stat-grid">
-    <div class="stat-card">
-      <div class="icon">📊</div>
-      <div class="label">Toplam silver satır</div>
-      <div class="value">474,186</div>
-    </div>
-    <div class="stat-card">
-      <div class="icon">🏷️</div>
-      <div class="label">Benzersiz suç tipi</div>
-      <div class="value">34</div>
-    </div>
-    <div class="stat-card">
-      <div class="icon">🗺️</div>
-      <div class="label">Benzersiz ilçe</div>
-      <div class="value">23</div>
-    </div>
-    <div class="stat-card">
-      <div class="icon">🚔</div>
-      <div class="label">Tutuklama oranı</div>
-      <div class="value">21.1%</div>
-    </div>
-    <div class="stat-card">
-      <div class="icon">📅</div>
-      <div class="label">Yıl aralığı</div>
-      <div class="value" style="font-size:1.2em;">2001 – 2023</div>
-    </div>
-    <div class="stat-card">
-      <div class="icon">🤖</div>
-      <div class="label">Eğitilen modeller</div>
-      <div class="value">5</div>
-    </div>
+    <div class="stat-card"><div class="icon">📊</div><div class="label">Silver satır</div><div class="value">474,186</div></div>
+    <div class="stat-card"><div class="icon">🏷️</div><div class="label">Suç tipi</div><div class="value">34</div></div>
+    <div class="stat-card"><div class="icon">🗺️</div><div class="label">İlçe</div><div class="value">23</div></div>
+    <div class="stat-card"><div class="icon">🚔</div><div class="label">Tutuklama oranı</div><div class="value">21.1%</div></div>
+    <div class="stat-card"><div class="icon">📅</div><div class="label">Yıl aralığı</div><div class="value" style="font-size:1em;">2001–2023</div></div>
+    <div class="stat-card"><div class="icon">🤖</div><div class="label">Eğitilen model</div><div class="value">5</div></div>
   </div>
   <aside class="notes">
-    Canlı sayılar — bu slayt MLflow ve EDA özetinden otomatik üretildi.
-    Silver tablomuzda 474K satır, 34 farklı suç tipi var. Tutuklama oranı %21.
+    474K silver satır, 34 farklı suç tipi, 23 farklı ilçe, tutuklama oranı %21.
   </aside>
 </section>
 
-<!-- ========== Slide 4: Architecture ========== -->
+<!-- ========== Slayt 4: Mimari ========== -->
 <section>
   <h2>Mimari</h2>
-  <div class="arch">Crimes.csv ──▶ crime_producer ──Kafka──▶ Spark Structured Streaming
-                                              │
-                                              ▼
-                       Delta Lake: Bronze (raw event store)
-                                              │
-                                              ▼
-                           Silver (dedup + null clean + features)
-                                              │
-                       ┌──────────────────────┼────────────────────┐
-                       ▼                      ▼                    ▼
-                Gold tabloları         EDA notebook       5 ML modeli
-                                                                   │
-                                                                   ▼
-                                                            MLflow registry
-                                                                   │
-                                                                   ▼
-                                                              Inference →
-                                                          Streamlit Dashboard</div>
-  <div style="margin-top:20px;font-size:0.7em;opacity:0.8;">
-    7 servis · Docker Compose · Kafka KRaft · Spark 3.5 · Delta 3.2 · MLflow 2.16
-  </div>
+  <div class="arch-diagram">Crimes.csv ─▶ <span class="layer">crime_producer</span> ─Kafka─▶ <span class="layer">Spark Streaming</span>
+                                                  │
+                                                  ▼
+                       Delta Lake: <span class="layer">Bronze</span> (raw event store)
+                                                  │
+                                                  ▼
+                       <span class="layer">Silver</span> (dedup + features)
+                                                  │
+            ┌──────────────────────┼──────────────────────┐
+            ▼                      ▼                      ▼
+    <span class="layer">Gold tabloları</span>        <span class="layer">EDA notebook</span>          <span class="layer">5 ML modeli</span>
+                                                          │
+                                                          ▼
+                                                  <span class="layer">MLflow registry</span>
+                                                          │
+                                                          ▼
+                                            <span class="layer">Inference → Dashboard</span></div>
+  <p style="margin-top:18px; font-size:0.55em; color:var(--text-light); text-align:center;">
+    7 servis · Docker Compose · Kafka KRaft 3.9 · Spark 3.5 · Delta 3.2 · MLflow 2.16
+  </p>
   <aside class="notes">
-    Mimari uçtan uca: producer Kafka'ya yazar, Spark streaming bronze'a, batch silver/gold/ML adımları.
-    Hepsi Docker container'da, named volume'lar ile state persist.
+    Medallion architecture. Bronze raw, silver temizlenmiş, gold agregat.
+    Tüm servisler Docker container'da, named volume'larla state persist.
   </aside>
 </section>
 
-<!-- ========== Slide 5: PDF Steps ========== -->
+<!-- ========== Slayt 5: PDF adımları ========== -->
 <section>
-  <h2>PDF Adımlarının Eşleştirmesi</h2>
+  <h2>PDF Adımları Eşleştirmesi</h2>
   <div class="step-grid">
     <div class="step-card">
-      <div class="num">ADIM 1 + 2</div>
-      <div class="title">Docker + Kafka Producer</div>
-      <div class="desc"><code>docker-compose.yml</code> 7 servis + <code>crime_producer.py</code> (3 hız modu: fixed/speedup/burst)</div>
+      <div class="num">Adım 1 + 2</div>
+      <div class="title-h">Docker + Kafka Producer</div>
+      <div class="desc">docker-compose.yml 7 servis + crime_producer.py (3 hız modu: fixed/speedup/burst)</div>
     </div>
     <div class="step-card">
-      <div class="num">ADIM 3</div>
-      <div class="title">Spark Streaming + Delta</div>
+      <div class="num">Adım 3</div>
+      <div class="title-h">Spark Streaming + Delta</div>
       <div class="desc">Bronze (Kafka→Delta), Silver (dedup + features), Gold (3 agregat tablo)</div>
     </div>
     <div class="step-card">
-      <div class="num">ADIM 4</div>
-      <div class="title">EDA</div>
-      <div class="desc"><code>01_eda.py</code>: total/unique sayımları, yıllık/saatlik/haftalık trend</div>
+      <div class="num">Adım 4</div>
+      <div class="title-h">EDA</div>
+      <div class="desc">01_eda.py: total/unique sayımları, yıllık/saatlik/haftalık trend</div>
     </div>
     <div class="step-card">
-      <div class="num">ADIM 5</div>
-      <div class="title">Feature Engineering</div>
-      <div class="desc"><code>02_feature_engineering.py</code>: 13 özellik (zaman, konum, koordinat, bağlam)</div>
+      <div class="num">Adım 5</div>
+      <div class="title-h">Feature Engineering</div>
+      <div class="desc">02_feature_engineering.py: 13 özellik (zaman, konum, koordinat, bağlam)</div>
     </div>
-    <div class="step-card" style="grid-column:span 2;">
-      <div class="num">ADIM 6 — En kritik</div>
-      <div class="title">5 ML Modeli + MLflow</div>
-      <div class="desc">LR + DT + RF + GBT(OvR) + NB · Her run için <b>Feature Importance + Confusion Matrix + AUC + per-class metric</b> + model registry</div>
+    <div class="step-card wide">
+      <div class="num">Adım 6 — En kritik 🎯</div>
+      <div class="title-h">5 ML Modeli + MLflow</div>
+      <div class="desc">LR + DT + RF + GBT(OvR) + NB · her run için Feature Importance + Confusion Matrix + AUC + per-class metric + model registry</div>
     </div>
-    <div class="step-card" style="grid-column:span 2;">
-      <div class="num">ADIM 7</div>
-      <div class="title">Dashboard + Görseller</div>
-      <div class="desc">Streamlit 5 sekme + HTML rapor (<code>docs/rapor.html</code>) · PDF'in tüm zorunlu görselleri</div>
+    <div class="step-card wide">
+      <div class="num">Adım 7</div>
+      <div class="title-h">Dashboard + Görseller</div>
+      <div class="desc">Streamlit 5 sekme + interaktif HTML rapor · PDF'in tüm zorunlu görselleri (5 model bar, FI hbar, CM, ROC, time series, histogram, pie)</div>
     </div>
   </div>
   <aside class="notes">
-    Her PDF adımı somut bir koda denk geliyor. En kritik adım 6: 5 model karşılaştırması.
-    Feature Importance ve Confusion Matrix zorunlu — her model için MLflow'a artifact olarak yazıldı.
+    PDF'in 7 adımı 6 somut bileşene eşlenir. En kritik adım 6 (5 model + MLflow + zorunlu artifact'ler).
   </aside>
 </section>
 
-<!-- ========== Slide 6: Bronze/Silver/Gold ========== -->
+<!-- ========== Slayt 6: Medallion ========== -->
 <section>
   <h2>Bronze · Silver · Gold</h2>
-  <div style="text-align:left;font-size:0.78em;line-height:1.7;">
-    <h3>🥉 Bronze (raw event store)</h3>
-    <ul>
-      <li>Kafka <code>crimes</code> → Delta <code>/opt/delta/bronze/crimes</code></li>
-      <li><b>Kritik fix:</b> <code>maxOffsetsPerTrigger=200000</code> (yoksa cluster dev batch'te commit etmiyor)</li>
-      <li>partitionBy(event_date)</li>
-    </ul>
-    <h3>🥈 Silver (ML-hazır)</h3>
-    <ul>
-      <li>dedup by <code>id</code> + null filtre (district, lat/lon, primary_type)</li>
-      <li>Türetilmiş: <code>hour_of_day</code>, <code>day_of_week</code>, <code>month</code>, <code>event_year</code></li>
-      <li>partitionBy(event_year) — fan-out önleyici</li>
-    </ul>
-    <h3>🥇 Gold (analitik + ML feature view)</h3>
-    <ul>
-      <li><code>type_stats</code>, <code>district_stats</code>, <code>hourly_stats</code>, <code>feature_view</code></li>
-      <li>Delta <code>OPTIMIZE</code> compaction → 67K küçük parquet → 8.5K büyük</li>
+  <div class="two-col">
+    <div class="col-card">
+      <h3>🥉 Bronze · raw event store</h3>
+      <ul style="font-size:0.6em;">
+        <li>Kafka <code>crimes</code> → Delta append</li>
+        <li><code>partitionBy(event_date)</code></li>
+        <li><b>Fix:</b> <code>maxOffsetsPerTrigger=200K</code></li>
+      </ul>
+    </div>
+    <div class="col-card">
+      <h3>🥈 Silver · ML-hazır</h3>
+      <ul style="font-size:0.6em;">
+        <li>dedup by <code>id</code> + null filter</li>
+        <li>Türetilmiş: hour/dow/month/year</li>
+        <li><code>partitionBy(event_year)</code></li>
+      </ul>
+    </div>
+  </div>
+  <div class="col-card" style="margin-top:18px;">
+    <h3>🥇 Gold · analitik + ML feature view</h3>
+    <ul style="font-size:0.6em; columns: 2; column-gap: 30px;">
+      <li><code>type_stats</code> — suç tipi başına frekans + arrest_rate</li>
+      <li><code>district_stats</code> — ilçe başına en sık tip + lat/lon</li>
+      <li><code>hourly_stats</code> — saat × suç tipi heatmap</li>
+      <li><code>feature_view</code> — ML-hazır 13 özellik snapshot</li>
+      <li><code>eda_overview</code> — EDA özet metrikleri</li>
+      <li><code>predictions</code> — inference çıktısı</li>
     </ul>
   </div>
+  <p style="font-size:0.55em; color:var(--text-light); margin-top:14px;">
+    💡 Optimize: Silver shuffle + partitioning 67K küçük parquet üretiyordu → Delta <code>OPTIMIZE</code> ile 8.5K büyük dosyaya kompakt edildi
+  </p>
   <aside class="notes">
-    Medallion architecture: bronze raw, silver temizlenmiş + feature, gold agregat.
-    Critical performance fix: bronze maxOffsetsPerTrigger. Tasarımca silver event_year (28 dizin)
-    çünkü event_date 8K+ dizin yaratacaktı.
+    Medallion architecture netleştirme. Bronze raw, silver feature-ready, gold analitik.
+    Bronze maxOffsetsPerTrigger fix ve silver OPTIMIZE — iki kritik performans iyileştirmesi.
   </aside>
 </section>
 
-<!-- ========== Slide 7: Features ========== -->
+<!-- ========== Slayt 7: Features ========== -->
 <section>
-  <h2>Adım 5 — 13 Özellik</h2>
-  <table style="margin:30px auto;font-size:0.75em;">
-    <tr><th>Tür</th><th>Özellikler</th><th>İş mantığı</th></tr>
-    <tr><td><b>Zaman (4)</b></td><td><code>hour_of_day, day_of_week, month, event_year</code></td><td>Theft öğleden sonra, battery gece</td></tr>
-    <tr><td><b>Konum (4)</b></td><td><code>district, ward, community_area, beat</code></td><td>Kuzey-güney suç dağılım farkı</td></tr>
-    <tr><td><b>Koordinat (2)</b></td><td><code>latitude, longitude</code></td><td>Yerleşim örüntüleri</td></tr>
-    <tr><td><b>Bağlam (2)</b></td><td><code>arrest_int, domestic_int</code></td><td>Domestic battery/assault korelasyonu</td></tr>
-    <tr><td><b>Türetilmiş bool (2)</b></td><td><code>is_weekend, is_night</code></td><td>Hafta sonu + gece riski</td></tr>
-  </table>
-  <p style="font-size:0.8em;opacity:0.85;">Her özelliğin iş mantığı <code>02_feature_engineering.py</code> docstring'inde · <code>gold/feature_view</code> Delta tablosuna materyalize edildi</p>
+  <h2>Adım 5 — 13 Özellik <span class="badge">PDF en az 5</span></h2>
+  <div style="margin-top: 20px;">
+    <h3>⏰ Zaman özellikleri (4)</h3>
+    <div class="feature-pills">
+      <span class="feature-pill">hour_of_day</span>
+      <span class="feature-pill">day_of_week</span>
+      <span class="feature-pill">month</span>
+      <span class="feature-pill">event_year</span>
+    </div>
+    <h3 style="margin-top:18px;">📍 Konum özellikleri (4)</h3>
+    <div class="feature-pills">
+      <span class="feature-pill">district</span>
+      <span class="feature-pill">ward</span>
+      <span class="feature-pill">community_area</span>
+      <span class="feature-pill">beat</span>
+    </div>
+    <h3 style="margin-top:18px;">🗺️ Koordinat (2) · Bağlam (2) · Türetilmiş (2)</h3>
+    <div class="feature-pills">
+      <span class="feature-pill">latitude</span>
+      <span class="feature-pill">longitude</span>
+      <span class="feature-pill">arrest_int</span>
+      <span class="feature-pill">domestic_int</span>
+      <span class="feature-pill">is_weekend</span>
+      <span class="feature-pill">is_night</span>
+    </div>
+  </div>
+  <p style="font-size:0.55em; color:var(--text-light); margin-top:20px;">
+    Her özelliğin iş mantığı <code>02_feature_engineering.py</code> docstring'inde
+    · <code>gold/feature_view</code> Delta tablosuna materyalize edildi
+  </p>
   <aside class="notes">
-    PDF en az 5 özellik istiyor — biz 13 üretttik. Her birinin neden faydalı olduğunu docstring'de yazdık.
+    PDF en az 5 özellik istiyor. Biz 13 ürettik; her birinin neden faydalı olduğunu docstring'de yazdık.
+    Theft öğleden sonra, battery gece — hour_of_day güçlü sinyal.
   </aside>
 </section>
 
-<!-- ========== Slide 8: 5 Model Results ========== -->
+<!-- ========== Slayt 8: 5 Model ========== -->
 <section>
-  <h2>5 Model Karşılaştırması <span class="badge-pdf">Adım 6 Zorunlu</span></h2>
+  <h2>5 ML Modeli Karşılaştırması <span class="badge">Adım 6</span></h2>
   <table>
-    <tr><th>Model</th><th>Accuracy</th><th>F1</th><th>AUC</th><th>Train</th></tr>
-    <tr style="background:rgba(255,215,0,0.12);"><td>🏆 <b>random_forest</b></td><td>0.4537</td><td>0.3810</td><td>0.6967</td><td>15.7s</td></tr><tr><td><b>gbt_ovr</b></td><td>0.4514</td><td>0.3813</td><td>—</td><td>60.5s</td></tr><tr><td><b>decision_tree</b></td><td>0.4419</td><td>0.3766</td><td>0.6800</td><td>3.9s</td></tr><tr><td><b>logistic_regression</b></td><td>0.4410</td><td>0.3703</td><td>0.6570</td><td>9.1s</td></tr><tr><td><b>naive_bayes</b></td><td>0.4311</td><td>0.3660</td><td>0.6571</td><td>1.0s</td></tr>
+    <thead><tr><th>Model</th><th>Accuracy</th><th>F1</th><th>AUC</th><th>Train</th></tr></thead>
+    <tbody>
+      <tr class="winner-row"><td><span class="crown">🏆</span> <b>random_forest</b></td><td>0.4614</td><td>0.3881</td><td>0.7012</td><td>23.3s</td></tr><tr><td><b>gbt_ovr</b></td><td>0.4542</td><td>0.3817</td><td>—</td><td>51.9s</td></tr><tr><td><b>decision_tree</b></td><td>0.4499</td><td>0.3886</td><td>0.6840</td><td>6.0s</td></tr><tr><td><b>logistic_regression</b></td><td>0.4455</td><td>0.3759</td><td>0.6621</td><td>16.3s</td></tr><tr><td><b>naive_bayes</b></td><td>0.4389</td><td>0.3788</td><td>0.6583</td><td>3.9s</td></tr>
+    </tbody>
   </table>
   
-<div style="background:linear-gradient(135deg,#48bb78,#2f855a);padding:30px;border-radius:14px;margin-top:30px;">
-  <div style="font-size:2em;margin-bottom:8px;">🏆 En iyi model</div>
-  <div style="font-size:2.4em;font-weight:900;">random_forest</div>
-  <div style="margin-top:14px;font-size:1.1em;">
-    accuracy = <b>0.4537</b> · weighted F1 = <b>0.3810</b> · AUC = <b>0.6967</b>
+<div class="winner-banner">
+  <div class="winner-icon">🏆</div>
+  <div>
+    <div class="winner-label">En iyi model</div>
+    <div class="winner-name">random_forest</div>
+    <div class="winner-stats">
+      <span>accuracy = <b>0.4614</b></span>
+      <span>weighted F1 = <b>0.3881</b></span>
+      <span>AUC = <b>0.7012</b></span>
+    </div>
   </div>
 </div>
 
-  <aside class="notes">
-    Tüm 5 model MLflow'a kaydedildi: Logistic Regression, Decision Tree, Random Forest, GBT+OneVsRest,
-    Naive Bayes (gaussian — longitude negatif olabildiği için multinomial değil).
-    Random Forest kazandı: accuracy 0.45, AUC 0.70. Baseline %22'yi iki katına çıkardık.
-  </aside>
-</section>
-
-<!-- ========== Slide 9: Feature Importance ========== -->
-<section>
-  <h2>Feature Importance <span class="badge-pdf">PDF Zorunlu</span></h2>
-  <p>Random Forest split önemine göre en etkili özellikler:</p>
-  <ol style="text-align:left;margin:25px auto;max-width:600px;font-size:0.85em;line-height:1.9;">
-    <li><b>latitude</b> + <b>longitude</b> — coğrafi konum suç tipini belirleyici</li>
-    <li><b>hour_of_day</b> — günün saati (theft gündüz, battery gece)</li>
-    <li><b>district</b> — Chicago ilçesi (north/south side farkı)</li>
-    <li><b>community_area</b> — daha ince konum granularity</li>
-    <li><b>event_year</b> — uzun vadeli trend (narcotics 2010 sonrası azaldı)</li>
-  </ol>
-  <p style="font-size:0.75em;opacity:0.75;margin-top:20px;">
-    Tam grafik: <a href="rapor.html#fi" style="color:#f6e05e;">docs/rapor.html → Feature Importance</a>
+  <p style="font-size:0.5em; color:var(--text-light); margin-top:14px;">
+    Tüm 5 model MLflow'a kaydedildi · Feature Importance + Confusion Matrix + per-class CSV artifact'leri her run için yazıldı
   </p>
   <aside class="notes">
-    Coğrafi koordinatlar ve zaman en güçlü sinyaller. Lokasyon × saat etkileşimi
-    ağaç-tabanlı modellerin lineer modellerden iyi olmasının sebebi.
+    Logistic Regression, Decision Tree, Random Forest, GBT+OneVsRest, Naive Bayes (gaussian).
+    Random Forest kazandı: accuracy 0.45, AUC 0.70. Majority-class baseline %22'yi iki katına çıkardık.
   </aside>
 </section>
 
-<!-- ========== Slide 10: Top Crime Types ========== -->
+<!-- ========== Slayt 9: Feature Importance ========== -->
 <section>
-  <h2>Top 5 Suç Tipi</h2>
-  <ol style="text-align:left;margin:30px auto;max-width:700px;font-size:0.85em;line-height:2;">
-    <li><b>THEFT</b> — 105,815 olay</li><li><b>BATTERY</b> — 88,358 olay</li><li><b>CRIMINAL DAMAGE</b> — 52,992 olay</li><li><b>ASSAULT</b> — 35,351 olay</li><li><b>OTHER OFFENSE</b> — 29,863 olay</li>
-  </ol>
-  <p style="margin-top:20px;font-size:0.8em;opacity:0.85;">
-    Top-5 üzerine OTHER bucket'ı → 6 dengeli sınıf. Bu sayede majority-class baseline %22 → modellerimizden %45 (iki kat iyileşme).
+  <h2>Feature Importance <span class="badge">PDF Zorunlu</span></h2>
+  <p style="font-size:0.65em; color:var(--text-light); margin-bottom:18px;">
+    En iyi modelin (Random Forest) split önemine göre <b>en etkili 5 özellik</b>:
   </p>
-  <aside class="notes">
-    Theft her zaman birinci. Domestic battery için arrest_rate yüksek.
-  </aside>
-</section>
-
-<!-- ========== Slide 11: Challenges ========== -->
-<section>
-  <h2>Karşılaşılan Zorluklar</h2>
-  <table style="font-size:0.7em;">
-    <tr><th>Sorun</th><th>Çözüm</th></tr>
-    <tr><td>Bronze dev batch commit etmiyordu</td><td><code>maxOffsetsPerTrigger</code> + worker 2→8 core</td></tr>
-    <tr><td>Silver 67K küçük parquet fan-out</td><td>partitionBy(event_year) + Delta <code>OPTIMIZE</code></td></tr>
-    <tr><td>Dashboard count_rows() askıda</td><td>Delta <code>add_actions.num_records</code> metadata</td></tr>
-    <tr><td>GBT Spark MLlib'de multi-class yok</td><td><code>OneVsRest(GBTClassifier)</code> wrapper</td></tr>
-    <tr><td>NaiveBayes neg longitude ile kırılıyor</td><td><code>modelType="gaussian"</code></td></tr>
-    <tr><td>multi_class_auc UNRESOLVED_ROUTINE</td><td><code>pyspark.ml.functions.vector_to_array</code> import</td></tr>
-  </table>
-  <aside class="notes">
-    Her sorun bir öğrenim noktası. Bronze fix Spark streaming + Kafka entegrasyonu tecrübesi,
-    silver OPTIMIZE Delta lake operations, GBT OneVsRest multi-class wrap.
-  </aside>
-</section>
-
-<!-- ========== Slide 12: Demo & Deliverables ========== -->
-<section>
-  <h2>Teslimler ve Demo</h2>
-  <div style="text-align:left;font-size:0.8em;line-height:1.7;">
-    <h3>🔧 Tek komut</h3>
-    <pre style="font-size:0.75em;"><code>make verify         # statik kontrol
-make run-all        # uçtan uca (~30-50 dk)
-make report         # HTML rapor üret
-make presentation   # bu slideshow'u üret</code></pre>
-
-    <h3>🌐 Erişim noktaları</h3>
-    <ul>
-      <li><b>Streamlit Dashboard:</b> http://localhost:8501 (5 sekme)</li>
-      <li><b>MLflow UI:</b> http://localhost:5000 (5 model + artifact'ler)</li>
-      <li><b>Spark UI:</b> http://localhost:8080</li>
-      <li><b>HTML rapor:</b> <code>docs/rapor.html</code></li>
-      <li><b>Bu sunum:</b> <code>docs/sunum.html</code> ← şu an buradasınız</li>
-    </ul>
-
-    <h3>📦 Repository</h3>
-    <p><a href="https://github.com/bigdataKOU/bigdataproje" style="color:#f6e05e;">github.com/bigdataKOU/bigdataproje</a></p>
+  <div class="rank-list">
+    <div class="rank-item">
+      <div class="medal">🥇</div>
+      <div class="rank-text"><b>latitude + longitude</b>
+        <div class="rank-num">Coğrafi konum — suç tipini en güçlü belirleyici sinyal</div></div>
+    </div>
+    <div class="rank-item">
+      <div class="medal">🥈</div>
+      <div class="rank-text"><b>hour_of_day</b>
+        <div class="rank-num">Günün saati — theft gündüz, battery gece</div></div>
+    </div>
+    <div class="rank-item">
+      <div class="medal">🥉</div>
+      <div class="rank-text"><b>district</b>
+        <div class="rank-num">Chicago ilçesi — north/south side farkı</div></div>
+    </div>
+    <div class="rank-item">
+      <div class="medal">4️⃣</div>
+      <div class="rank-text"><b>community_area</b>
+        <div class="rank-num">Daha ince konum granularity</div></div>
+    </div>
+    <div class="rank-item">
+      <div class="medal">5️⃣</div>
+      <div class="rank-text"><b>event_year</b>
+        <div class="rank-num">Uzun vadeli trend (narcotics 2010 sonrası azaldı)</div></div>
+    </div>
   </div>
   <aside class="notes">
-    Her şey tek komutla tekrarlanabilir. Repo public, commit geçmişi mevcut.
+    Koordinatlar + saat × ilçe etkileşimi ağaç-tabanlı modellerin lineer modellerden iyi olmasının sebebi.
   </aside>
 </section>
 
-<!-- ========== Slide 13: Q&A ========== -->
-<section style="text-align:center;">
-  <div style="font-size:5em;margin-bottom:30px;">❓</div>
-  <h1 style="color:#f6e05e;">Sorular?</h1>
-  <p style="margin-top:30px;opacity:0.8;">Pipeline mimarisi · Model seçimi · Feature engineering · Karşılaşılan zorluklar</p>
-  <aside class="notes">
-    Soru-cevap. Her takım üyesi kendi sorumluluk alanına dair detay verebilir.
-  </aside>
-</section>
-
-<!-- ========== Slide 14: Thanks ========== -->
-<section class="thanks-slide">
-  <div style="font-size:6em;">🎓</div>
-  <div class="thanks-text">Teşekkürler</div>
-  <p style="font-size:1.1em;line-height:1.7;max-width:700px;margin:30px auto;">
-    Sayın hocamız <b style="color:#f6e05e;">Dr. Ayşe Gül Eker</b>'e, bu projeyle endüstri-standart bir
-    veri mühendisliği akışını uçtan uca deneyimleme fırsatı verdiği için teşekkür ederiz.
+<!-- ========== Slayt 10: Top 5 suç tipi ========== -->
+<section>
+  <h2>Top 5 Suç Tipi <span class="badge">EDA</span></h2>
+  <p style="font-size:0.65em; color:var(--text-light); margin-bottom:18px;">
+    Sınıflandırma için <b>Top-5 + OTHER</b> = 6 dengeli sınıf yaklaşımı kullanıldı.
   </p>
-  <p style="opacity:0.75;margin-top:30px;">Kocaeli Üniversitesi · Bilgisayar Mühendisliği · BLM442</p>
-  <p style="opacity:0.6;font-size:0.8em;">Bizleri dinlediğiniz için teşekkürler ❤️</p>
+  <div class="rank-list">
+    <div class="rank-item"><div class="medal">🥇</div><div class="rank-text"><b>THEFT</b><div class="rank-num">105,815 olay</div></div></div><div class="rank-item"><div class="medal">🥈</div><div class="rank-text"><b>BATTERY</b><div class="rank-num">88,358 olay</div></div></div><div class="rank-item"><div class="medal">🥉</div><div class="rank-text"><b>CRIMINAL DAMAGE</b><div class="rank-num">52,992 olay</div></div></div><div class="rank-item"><div class="medal">4️⃣</div><div class="rank-text"><b>ASSAULT</b><div class="rank-num">35,351 olay</div></div></div><div class="rank-item"><div class="medal">5️⃣</div><div class="rank-text"><b>OTHER OFFENSE</b><div class="rank-num">29,863 olay</div></div></div>
+  </div>
+  <p style="font-size:0.55em; color:var(--text-light); margin-top:18px;">
+    💡 Majority-class baseline (THEFT) %22 → modelimizden <b>%45</b> (iki kat iyileşme)
+  </p>
   <aside class="notes">
-    Sunum bitti. Final teşekkür. Ortalama 10-12 dakika sürdü.
+    Theft her zaman birinci. Domestic battery için arrest_rate yüksek. Top-5 + OTHER ile dengelenmiş 6 sınıf.
+  </aside>
+</section>
+
+<!-- ========== Slayt 11: Zorluklar ========== -->
+<section>
+  <h2>Karşılaşılan Zorluklar</h2>
+  <table>
+    <thead><tr><th style="width:50%">Sorun</th><th>Çözüm</th></tr></thead>
+    <tbody>
+      <tr><td>Bronze dev batch commit etmiyordu</td><td><code>maxOffsetsPerTrigger</code> + worker 2→8 core</td></tr>
+      <tr><td>Silver 67K küçük parquet fan-out</td><td><code>partitionBy(event_year)</code> + Delta <code>OPTIMIZE</code></td></tr>
+      <tr><td>Dashboard count_rows() askıda</td><td>Delta <code>add_actions.num_records</code> metadata</td></tr>
+      <tr><td>GBT multi-class yok</td><td><code>OneVsRest(GBTClassifier)</code> wrapper</td></tr>
+      <tr><td>NaiveBayes neg longitude'a kırılıyor</td><td><code>modelType="gaussian"</code></td></tr>
+      <tr><td>AUC için <code>vector_to_array</code> UNRESOLVED</td><td><code>pyspark.ml.functions</code> Python import</td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:0.55em; color:var(--text-light); margin-top:14px;">
+    Her sorun bir öğrenim noktası: Spark streaming + Kafka entegrasyonu, Delta lake operations, GBT wrapper trick'leri
+  </p>
+  <aside class="notes">
+    6 ana zorluk + çözümü. Hepsi PDF metnindeki teknolojilerle ilgili pratik tecrübe.
+  </aside>
+</section>
+
+<!-- ========== Slayt 12: Demo / Erişim ========== -->
+<section>
+  <h2>Teslimler ve Demo</h2>
+  <h3>🔧 Tek komutla</h3>
+  <pre><code>make verify         # statik kontrol
+make run-all        # uçtan uca pipeline (~30-50 dk)
+make report         # docs/rapor.html HTML rapor
+make presentation   # docs/sunum.html bu slideshow</code></pre>
+
+  <h3 style="margin-top:18px;">🌐 Erişim Noktaları</h3>
+  <div class="two-col">
+    <div class="col-card" style="padding:14px 18px;">
+      <ul style="font-size:0.6em; margin:0;">
+        <li><b>Dashboard</b> :8501 — Streamlit (5 sekme)</li>
+        <li><b>MLflow UI</b> :5000 — 5 model + artifact</li>
+        <li><b>Spark UI</b> :8080 — job tracker</li>
+      </ul>
+    </div>
+    <div class="col-card" style="padding:14px 18px;">
+      <ul style="font-size:0.6em; margin:0;">
+        <li><b>docs/rapor.html</b> — interaktif rapor</li>
+        <li><b>docs/sunum.html</b> — bu sunum</li>
+        <li><b>docs/teknik_rapor.md</b> — markdown</li>
+      </ul>
+    </div>
+  </div>
+  <h3 style="margin-top:18px;">📦 Repository</h3>
+  <p><a href="https://github.com/bigdataKOU/bigdataproje" style="font-size:0.7em;">github.com/bigdataKOU/bigdataproje</a> · 10 branch · commit geçmişi mevcut</p>
+  <aside class="notes">
+    Her şey tek komutla tekrarlanabilir. Repo public, commit geçmişi takım katkısını gösteriyor.
+  </aside>
+</section>
+
+<!-- ========== Slayt 13: Q&A ========== -->
+<section class="qa-slide">
+  <div class="qa-mark">❓</div>
+  <h1>Sorular</h1>
+  <p>Pipeline mimarisi · Model seçimi · Feature engineering · Karşılaşılan zorluklar</p>
+  <aside class="notes">
+    Soru-cevap. Her üye kendi sorumluluk alanında detay verebilir.
+  </aside>
+</section>
+
+<!-- ========== Slayt 14: Teşekkürler ========== -->
+<section class="thanks-slide">
+  <div class="icon">🎓</div>
+  <div class="thanks-text">Teşekkürler</div>
+  <p>
+    Sayın hocamız <b>Dr. Ayşe Gül Eker</b>'e, bu projeyle endüstri-standart bir
+    veri mühendisliği akışını uçtan uca deneyimleme fırsatı verdiği için
+    teşekkür ederiz.
+  </p>
+  <p>Bizleri dinlediğiniz için teşekkürler ❤️</p>
+  <div class="signature">
+    Kocaeli Üniversitesi · Bilgisayar Mühendisliği · BLM442<br>
+    Emre Aytaş · Hatice Kübra Kılıçaslan · Berker Yiğit · Mertcan Kuzey
+  </div>
+  <aside class="notes">
+    Final teşekkür. Ortalama 10-12 dakika sürdü.
   </aside>
 </section>
 
@@ -467,6 +734,11 @@ make presentation   # bu slideshow'u üret</code></pre>
     slideNumber: 'c/t',
     controls: true,
     progress: true,
+    width: 1400,
+    height: 900,
+    margin: 0.04,
+    minScale: 0.2,
+    maxScale: 2.0,
     transition: 'slide',
     backgroundTransition: 'fade',
     plugins: [RevealNotes, RevealHighlight]

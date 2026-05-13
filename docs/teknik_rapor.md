@@ -99,13 +99,13 @@ Konfigürasyon: 2M kafka mesajı → 474,186 silver satır (null + dedup sonras�
 
 ### 5 Model Karşılaştırma (PDF Adım 6 zorunlu)
 
-| Model | Accuracy | Weighted F1 | Weighted Precision | Weighted Recall | AUC (OvR macro) | Train (s) |
-|---|---|---|---|---|---|---|
-| **Random Forest** | **0.4537** | 0.3810 | 0.3853 | 0.4537 | **0.6967** | 15.7 |
-| GBT (OvR) | 0.4514 | 0.3813 | 0.3855 | 0.4514 | — | 60.5 |
-| Decision Tree | 0.4419 | 0.3766 | 0.3836 | 0.4419 | 0.6800 | 3.9 |
-| Logistic Regression | 0.4410 | 0.3703 | 0.3365 | 0.4410 | 0.6570 | 9.1 |
-| Naive Bayes (gaussian) | 0.4311 | 0.3660 | 0.3302 | 0.4311 | 0.6571 | 1.0 |
+| Model | Accuracy | Weighted F1 | AUC (OvR macro) | Train (s) |
+|---|---|---|---|---|
+| **Random Forest** (40 ağaç, depth=10) | **0.4614** | 0.3881 | **0.7012** | 23.3 |
+| GBT (OvR, 15 iter, depth=4) | 0.4542 | 0.3817 | — | 51.9 |
+| Decision Tree (depth=12) | 0.4499 | 0.3886 | 0.6840 | 6.0 |
+| Logistic Regression (50 iter, multinomial) | 0.4455 | 0.3759 | 0.6621 | 16.3 |
+| Naive Bayes (gaussian) | 0.4389 | 0.3788 | 0.6583 | 3.9 |
 
 **Kazanan: RandomForest** (accuracy 45.37%, AUC OvR macro 0.697). Sınıflandırma için **majority-class baseline ~22%** olduğundan (THEFT) iki katından fazla iyileşme.
 
