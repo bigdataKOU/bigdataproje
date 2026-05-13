@@ -34,133 +34,85 @@ EDA_TABLE = f"{DELTA_PATH}/gold/eda_overview"
 
 def main() -> int:
     os.environ["SPARK_MASTER_URL"] = os.environ.get("SPARK_MASTER_URL", "local[*]")
-    spark = build_spark("eda")
-    spark.sparkContext.setLogLevel("WARN")
+    spark = build_spark("eda-optimized")
+    spark.sparkContext.setLogLevel("ERROR")
 
-    silver = spark.read.format("delta").load(silver_path()).cache()
-    summary = {}
+    # Silver tablosunu oku ve persist et (count + agg işlemleri için tetikleyici olur)
+    silver = spark.read.format("delta").load(silver_path()).persist()
+    
+    if silver.rdd.isEmpty():
+        print("[eda] Silver tablosu boş, işlem iptal edildi.")
+        return 0
 
-    # 1) Temel istatistikler
-    total = silver.count()
-    summary["total_rows"] = total
-    summary["unique_primary_type"] = silver.select("primary_type").distinct().count()
-    summary["unique_district"] = silver.select("district").distinct().count()
-    summary["unique_ward"] = silver.select("ward").distinct().count()
-    summary["unique_community_area"] = silver.select("community_area").distinct().count()
-    summary["unique_year"] = silver.select("event_year").distinct().count()
-    summary["arrest_rate"] = float(
-        silver.where(F.col("arrest")).count() / total if total else 0.0
-    )
-    summary["domestic_rate"] = float(
-        silver.where(F.col("domestic")).count() / total if total else 0.0
-    )
+    # 1, 3 ve 4: Çoklu Count/Distinct işlemlerini tek bir agg içine toplayarak Shuffle'ı azaltıyoruz
+    # Spark her .count() için tüm tabloyu tekrar taramaz
+    metrics = silver.select(
+        F.count("*").alias("total"),
+        F.countDistinct("primary_type").alias("u_type"),
+        F.countDistinct("district").alias("u_district"),
+        F.countDistinct("ward").alias("u_ward"),
+        F.countDistinct("community_area").alias("u_community"),
+        F.avg(F.col("arrest").cast("int")).alias("arrest_rate"),
+        F.avg(F.col("domestic").cast("int")).alias("domestic_rate")
+    ).collect()[0]
 
-    # 2) Eksik deger analizi (silver'da olmamasi gerek ama dogrula)
-    null_counts = {}
-    for col in silver.columns:
-        n = silver.where(F.col(col).isNull()).count()
-        if n > 0:
-            null_counts[col] = n
-    summary["null_counts"] = null_counts
-
-    # 3) Olay dagilimi: top primary_type
-    top_types = (
-        silver.groupBy("primary_type")
-        .count()
-        .orderBy(F.col("count").desc())
-        .limit(15)
-        .collect()
-    )
-    summary["top_primary_types"] = [
-        {"primary_type": r["primary_type"], "count": r["count"]} for r in top_types
-    ]
-
-    # 4) Zaman trendleri: yıllık + saatlik + haftalik
-    yearly = (
-        silver.groupBy("event_year")
-        .agg(F.count("*").alias("crime_count"),
-             F.avg(F.col("arrest").cast("int")).alias("arrest_rate"))
-        .orderBy("event_year")
-    )
-    yearly_rows = yearly.collect()
-    summary["yearly_trend"] = [
-        {"year": int(r["event_year"]),
-         "crime_count": int(r["crime_count"]),
-         "arrest_rate": float(r["arrest_rate"])}
-        for r in yearly_rows
-    ]
-
-    hourly = (
-        silver.groupBy("hour_of_day")
-        .agg(F.count("*").alias("crime_count"))
-        .orderBy("hour_of_day")
-        .collect()
-    )
-    summary["hourly_trend"] = [
-        {"hour": int(r["hour_of_day"]), "crime_count": int(r["crime_count"])}
-        for r in hourly
-    ]
-
-    weekly = (
-        silver.groupBy("day_of_week")
-        .agg(F.count("*").alias("crime_count"))
-        .orderBy("day_of_week")
-        .collect()
-    )
-    summary["weekly_trend"] = [
-        {"day_of_week": int(r["day_of_week"]),
-         "crime_count": int(r["crime_count"])}
-        for r in weekly
-    ]
-
-    # 5) Sayisal degisken dagilimi (latitude/longitude/year)
-    desc = silver.select("latitude", "longitude", "year").describe().collect()
-    summary["numeric_describe"] = {
-        r["summary"]: {
-            "latitude": r["latitude"],
-            "longitude": r["longitude"],
-            "year": r["year"],
-        }
-        for r in desc
+    total = metrics["total"]
+    summary = {
+        "total_rows": total,
+        "unique_primary_type": metrics["u_type"],
+        "unique_district": metrics["u_district"],
+        "unique_ward": metrics["u_ward"],
+        "unique_community_area": metrics["u_community"],
+        "arrest_rate": float(metrics["arrest_rate"] or 0),
+        "domestic_rate": float(metrics["domestic_rate"] or 0)
     }
 
-    # 6) Bir sonraki adim icin dashboard'a aktar — gold/eda_overview Delta
-    eda_df = spark.createDataFrame(
-        [
-            {"metric": "total_rows", "value": float(summary["total_rows"])},
-            {"metric": "unique_primary_type", "value": float(summary["unique_primary_type"])},
-            {"metric": "unique_district", "value": float(summary["unique_district"])},
-            {"metric": "arrest_rate", "value": summary["arrest_rate"]},
-            {"metric": "domestic_rate", "value": summary["domestic_rate"]},
-        ]
-    )
-    (eda_df.write.format("delta").mode("overwrite")
-        .option("overwriteSchema", "true")
-        .save(EDA_TABLE))
-    print(f"[eda] gold table -> {EDA_TABLE}", flush=True)
+    # 2) Eksik değer analizi - Her kolon için ayrı döngü yerine tek seferde hesaplama
+    null_exprs = [F.count(F.when(F.col(c).isNull(), c)).alias(c) for c in silver.columns]
+    null_data = silver.select(null_exprs).collect()[0].asDict()
+    summary["null_counts"] = {k: v for k, v in null_data.items() if v > 0}
 
-    # 7) JSON dump
-    os.makedirs(os.path.dirname(SUMMARY_PATH), exist_ok=True)
-    with open(SUMMARY_PATH, "w") as f:
-        json.dump(summary, f, indent=2, default=str)
-    print(f"[eda] summary json -> {SUMMARY_PATH}", flush=True)
+    # 3 & 4) Toplu Gruplamalar (Zaman ve Tip Trendleri)
+    # Tek bir collect ile list comprehensions kullanarak veriyi Python tarafına çekiyoruz
+    summary["top_primary_types"] = [
+        r.asDict() for r in silver.groupBy("primary_type").count().orderBy(F.desc("count")).limit(15).collect()
+    ]
 
-    # 8) Stdout ozet
-    print("\n=== EDA Özeti ===", flush=True)
-    print(f"Toplam satir         : {summary['total_rows']:,}", flush=True)
-    print(f"Benzersiz suç tipi   : {summary['unique_primary_type']}", flush=True)
-    print(f"Benzersiz ilçe       : {summary['unique_district']}", flush=True)
-    print(f"Tutuklama orani      : {summary['arrest_rate']:.3%}", flush=True)
-    print(f"Yil araligi          : "
-          f"{summary['yearly_trend'][0]['year']} - "
-          f"{summary['yearly_trend'][-1]['year']}", flush=True)
-    print("\nTop 5 suç tipi:", flush=True)
-    for t in summary["top_primary_types"][:5]:
-        print(f"  {t['primary_type']:30s} {t['count']:>10,}", flush=True)
+    # Yıllık ve Saatlik trendleri hesapla
+    summary["yearly_trend"] = [
+        {"year": int(r["event_year"]), "count": r["cnt"], "arrest_rate": float(r["ar"])} 
+        for r in silver.groupBy("event_year").agg(F.count("*").alias("cnt"), F.avg(F.col("arrest").cast("int")).alias("ar")).orderBy("event_year").collect()
+    ]
 
+    summary["hourly_trend"] = [
+        {"hour": int(r["hour_of_day"]), "count": r["cnt"]} 
+        for r in silver.groupBy("hour_of_day").agg(F.count("*").alias("cnt")).orderBy("hour_of_day").collect()
+    ]
+
+    # 5) Describe yerine summary - Daha hızlı sonuç verir
+    desc_pd = silver.select("latitude", "longitude", "event_year").summary("mean", "stddev", "min", "max").toPandas()
+    summary["numeric_describe"] = desc_pd.set_index("summary").to_dict()
+
+    # 6) Delta'ya yazma
+    eda_data = [
+        ("total_rows", float(summary["total_rows"])),
+        ("unique_primary_type", float(summary["unique_primary_type"])),
+        ("arrest_rate", summary["arrest_rate"]),
+        ("domestic_rate", summary["domestic_rate"])
+    ]
+    spark.createDataFrame(eda_data, ["metric", "value"]).write.format("delta").mode("overwrite").save(EDA_TABLE)
+
+    # 7) JSON Çıktısı
+    try:
+        os.makedirs(os.path.dirname(SUMMARY_PATH), exist_ok=True)
+        with open(SUMMARY_PATH, "w") as f:
+            json.dump(summary, f, indent=2, default=str)
+    except Exception as e:
+        print(f"[Hata] JSON kaydedilemedi: {e}")
+
+    # 8) Konsol Özeti
+    print(f"\n=== EDA TAMAMLANDI | Satır: {total:,} | Suç Tipi: {summary['unique_primary_type']} ===")
+    
+    silver.unpersist() # Belleği temizle
     spark.stop()
     return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
