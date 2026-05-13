@@ -230,12 +230,12 @@ with tab_preds:
         st.info("Henüz tahmin yok — `inference.py` çalıştırılmalı.")
     else:
         sample = preds.head(1000)
-        match = (sample["actual_primary_type"] == sample["predicted_label"]).mean()
+        match = (sample["actual_label"] == sample["predicted_label"]).mean()
         st.metric("Örnek (1K satır) doğruluk", f"{match:.1%}")
 
         col_a, col_b = st.columns(2)
         with col_a:
-            actual_top = sample["actual_primary_type"].value_counts().head(10)
+            actual_top = sample["actual_label"].value_counts().head(10)
             st.markdown("**Gerçek dağılım (top 10)**")
             st.bar_chart(actual_top)
         with col_b:
@@ -245,7 +245,7 @@ with tab_preds:
 
         st.subheader("Karışıklık matrisi (örnek)")
         cm = pd.crosstab(
-            sample["actual_primary_type"],
+            sample["actual_label"],
             sample["predicted_label"],
         )
         st.plotly_chart(
@@ -329,18 +329,45 @@ with tab_mlflow:
                         )
 
                 st.markdown("**Pareto: doğruluk vs eğitim süresi**")
-                pareto = df.dropna(subset=["accuracy", "train_seconds"])
+                pareto = df.dropna(subset=["accuracy", "train_seconds"]).copy()
                 if not pareto.empty:
-                    st.plotly_chart(
-                        px.scatter(
-                            pareto,
-                            x="train_seconds", y="accuracy",
-                            size="numTrees", color="maxDepth",
-                            hover_data=["run_name"],
-                            text="run_name",
-                        ),
-                        use_container_width=True,
+                    # NaN -> '—' (plotly customdata index gosteriyor yoksa)
+                    pareto["numTrees_str"] = pareto["numTrees"].apply(
+                        lambda v: f"{int(v)}" if pd.notna(v) else "—"
                     )
+                    pareto["maxDepth_str"] = pareto["maxDepth"].apply(
+                        lambda v: f"{int(v)}" if pd.notna(v) else "—"
+                    )
+                    pareto["accuracy_str"] = pareto["accuracy"].apply(
+                        lambda v: f"{v:.4f}"
+                    )
+                    pareto["train_seconds_str"] = pareto["train_seconds"].apply(
+                        lambda v: f"{v:.1f}s"
+                    )
+                    fig = px.scatter(
+                        pareto, x="train_seconds", y="accuracy",
+                        color="run_name", text="run_name",
+                    )
+                    fig.update_traces(
+                        hovertemplate=(
+                            "<b>%{customdata[0]}</b><br>"
+                            "accuracy = %{customdata[1]}<br>"
+                            "train süresi = %{customdata[2]}<br>"
+                            "numTrees = %{customdata[3]}<br>"
+                            "maxDepth = %{customdata[4]}<extra></extra>"
+                        ),
+                        customdata=pareto[[
+                            "run_name", "accuracy_str", "train_seconds_str",
+                            "numTrees_str", "maxDepth_str",
+                        ]].values,
+                        textposition="top center",
+                        marker=dict(size=14),
+                    )
+                    fig.update_layout(
+                        xaxis_title="Eğitim süresi (saniye)",
+                        yaxis_title="Accuracy",
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
     except Exception as exc:
         st.error(f"MLflow erişilemiyor: {exc}")
 

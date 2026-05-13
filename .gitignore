@@ -43,3 +43,9 @@ sweep-summary-partial.txt
 # Additional pipeline runtime logs
 logs-*.txt
 
+
+# Dashboard container runtime files (mounted)
+dashboard/eda_summary.json
+dashboard/rapor.html
+dashboard/make_report.py
+

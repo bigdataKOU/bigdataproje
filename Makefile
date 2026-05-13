@@ -69,6 +69,13 @@ inference:
 charts:
 	python3 scripts/make_charts.py
 
+report:
+	@cp scripts/make_report.py dashboard/make_report.py
+	@docker cp $$(docker compose ps -q pipeline):/opt/app/notebooks/eda_summary.json dashboard/eda_summary.json 2>/dev/null || true
+	docker compose exec -T -e MLFLOW_TRACKING_URI=http://mlflow:5000 -e REPORT_OUT=/app/rapor.html dashboard python /app/make_report.py
+	cp dashboard/rapor.html docs/rapor.html
+	@echo "HTML rapor: docs/rapor.html"
+
 dashboard:
 	docker compose up -d dashboard
 	@echo "Dashboard: http://localhost:8501"
