@@ -32,7 +32,18 @@ def read_delta(path: str):
 
 @st.cache_data(ttl=60)
 def read_delta_count(path: str):
+    """Hızlı count — Delta transaction log'undan add actions' num_records sum.
+    pyarrow_dataset().count_rows() tüm parquet dosyalarını açar; bronze'da
+    binlerce küçük dosya varsa dakikalar alabilir."""
     try:
+        dt = DeltaTable(path)
+        try:
+            adds = dt.get_add_actions(flatten=True).to_pandas()
+            if "num_records" in adds.columns and adds["num_records"].notna().any():
+                return int(adds["num_records"].fillna(0).sum())
+        except Exception:
+            pass
+        # fallback: tam tarama (yavaş ama doğru)
         return DeltaTable(path).to_pyarrow_dataset().count_rows()
     except Exception:
         return None
