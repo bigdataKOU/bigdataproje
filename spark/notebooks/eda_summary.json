@@ -1,0 +1,349 @@
+{
+  "total_rows": 474186,
+  "unique_primary_type": 34,
+  "unique_district": 23,
+  "unique_ward": 51,
+  "unique_community_area": 79,
+  "unique_year": 23,
+  "arrest_rate": 0.21061144782848923,
+  "domestic_rate": 0.158724635480592,
+  "null_counts": {
+    "location_description": 764,
+    "ward": 7377,
+    "community_area": 7379
+  },
+  "top_primary_types": [
+    {
+      "primary_type": "THEFT",
+      "count": 105815
+    },
+    {
+      "primary_type": "BATTERY",
+      "count": 88358
+    },
+    {
+      "primary_type": "CRIMINAL DAMAGE",
+      "count": 52992
+    },
+    {
+      "primary_type": "ASSAULT",
+      "count": 35351
+    },
+    {
+      "primary_type": "OTHER OFFENSE",
+      "count": 29863
+    },
+    {
+      "primary_type": "NARCOTICS",
+      "count": 29353
+    },
+    {
+      "primary_type": "MOTOR VEHICLE THEFT",
+      "count": 28915
+    },
+    {
+      "primary_type": "DECEPTIVE PRACTICE",
+      "count": 26554
+    },
+    {
+      "primary_type": "BURGLARY",
+      "count": 21316
+    },
+    {
+      "primary_type": "ROBBERY",
+      "count": 17865
+    },
+    {
+      "primary_type": "CRIMINAL TRESPASS",
+      "count": 10592
+    },
+    {
+      "primary_type": "WEAPONS VIOLATION",
+      "count": 8809
+    },
+    {
+      "primary_type": "OFFENSE INVOLVING CHILDREN",
+      "count": 3551
+    },
+    {
+      "primary_type": "PUBLIC PEACE VIOLATION",
+      "count": 3191
+    },
+    {
+      "primary_type": "PROSTITUTION",
+      "count": 2035
+    }
+  ],
+  "yearly_trend": [
+    {
+      "year": 2001,
+      "crime_count": 5970,
+      "arrest_rate": 0.2961474036850921
+    },
+    {
+      "year": 2002,
+      "crime_count": 5582,
+      "arrest_rate": 0.2567180222142601
+    },
+    {
+      "year": 2003,
+      "crime_count": 5488,
+      "arrest_rate": 0.2636661807580175
+    },
+    {
+      "year": 2004,
+      "crime_count": 5493,
+      "arrest_rate": 0.3051156016748589
+    },
+    {
+      "year": 2005,
+      "crime_count": 5188,
+      "arrest_rate": 0.29703161141094836
+    },
+    {
+      "year": 2006,
+      "crime_count": 5258,
+      "arrest_rate": 0.2814758463294028
+    },
+    {
+      "year": 2007,
+      "crime_count": 5314,
+      "arrest_rate": 0.2739932254422281
+    },
+    {
+      "year": 2008,
+      "crime_count": 5224,
+      "arrest_rate": 0.24081163859111793
+    },
+    {
+      "year": 2009,
+      "crime_count": 4706,
+      "arrest_rate": 0.2620059498512537
+    },
+    {
+      "year": 2010,
+      "crime_count": 4724,
+      "arrest_rate": 0.25592718035563083
+    },
+    {
+      "year": 2011,
+      "crime_count": 4319,
+      "arrest_rate": 0.25376244501041906
+    },
+    {
+      "year": 2012,
+      "crime_count": 4177,
+      "arrest_rate": 0.23557577208522865
+    },
+    {
+      "year": 2013,
+      "crime_count": 3931,
+      "arrest_rate": 0.23963368099720173
+    },
+    {
+      "year": 2014,
+      "crime_count": 4298,
+      "arrest_rate": 0.23103769194974408
+    },
+    {
+      "year": 2015,
+      "crime_count": 211195,
+      "arrest_rate": 0.25041786027131324
+    },
+    {
+      "year": 2016,
+      "crime_count": 47258,
+      "arrest_rate": 0.22239620804943078
+    },
+    {
+      "year": 2017,
+      "crime_count": 3181,
+      "arrest_rate": 0.17824583464319396
+    },
+    {
+      "year": 2018,
+      "crime_count": 3197,
+      "arrest_rate": 0.16765717860494214
+    },
+    {
+      "year": 2019,
+      "crime_count": 2992,
+      "arrest_rate": 0.1925133689839572
+    },
+    {
+      "year": 2020,
+      "crime_count": 2355,
+      "arrest_rate": 0.16093418259023354
+    },
+    {
+      "year": 2021,
+      "crime_count": 2251,
+      "arrest_rate": 0.11683696135051089
+    },
+    {
+      "year": 2022,
+      "crime_count": 2548,
+      "arrest_rate": 0.1130298273155416
+    },
+    {
+      "year": 2023,
+      "crime_count": 129537,
+      "arrest_rate": 0.11847580228042953
+    }
+  ],
+  "hourly_trend": [
+    {
+      "hour": 0,
+      "crime_count": 26070
+    },
+    {
+      "hour": 1,
+      "crime_count": 14762
+    },
+    {
+      "hour": 2,
+      "crime_count": 12681
+    },
+    {
+      "hour": 3,
+      "crime_count": 10765
+    },
+    {
+      "hour": 4,
+      "crime_count": 8369
+    },
+    {
+      "hour": 5,
+      "crime_count": 7421
+    },
+    {
+      "hour": 6,
+      "crime_count": 8077
+    },
+    {
+      "hour": 7,
+      "crime_count": 11243
+    },
+    {
+      "hour": 8,
+      "crime_count": 16201
+    },
+    {
+      "hour": 9,
+      "crime_count": 20467
+    },
+    {
+      "hour": 10,
+      "crime_count": 20303
+    },
+    {
+      "hour": 11,
+      "crime_count": 21057
+    },
+    {
+      "hour": 12,
+      "crime_count": 27082
+    },
+    {
+      "hour": 13,
+      "crime_count": 22138
+    },
+    {
+      "hour": 14,
+      "crime_count": 23397
+    },
+    {
+      "hour": 15,
+      "crime_count": 25982
+    },
+    {
+      "hour": 16,
+      "crime_count": 24985
+    },
+    {
+      "hour": 17,
+      "crime_count": 25471
+    },
+    {
+      "hour": 18,
+      "crime_count": 27072
+    },
+    {
+      "hour": 19,
+      "crime_count": 26337
+    },
+    {
+      "hour": 20,
+      "crime_count": 25890
+    },
+    {
+      "hour": 21,
+      "crime_count": 24461
+    },
+    {
+      "hour": 22,
+      "crime_count": 23656
+    },
+    {
+      "hour": 23,
+      "crime_count": 20299
+    }
+  ],
+  "weekly_trend": [
+    {
+      "day_of_week": 1,
+      "crime_count": 67534
+    },
+    {
+      "day_of_week": 2,
+      "crime_count": 66849
+    },
+    {
+      "day_of_week": 3,
+      "crime_count": 66462
+    },
+    {
+      "day_of_week": 4,
+      "crime_count": 67152
+    },
+    {
+      "day_of_week": 5,
+      "crime_count": 67387
+    },
+    {
+      "day_of_week": 6,
+      "crime_count": 70318
+    },
+    {
+      "day_of_week": 7,
+      "crime_count": 68484
+    }
+  ],
+  "numeric_describe": {
+    "count": {
+      "latitude": "474186",
+      "longitude": "474186",
+      "year": "474186"
+    },
+    "mean": {
+      "latitude": "41.84319254709696",
+      "longitude": "-87.67077326165396",
+      "year": "2016.2654570147579"
+    },
+    "stddev": {
+      "latitude": "0.0913647533867537",
+      "longitude": "0.06385872684379806",
+      "year": "5.326980058213431"
+    },
+    "min": {
+      "latitude": "36.619446395",
+      "longitude": "-91.686565684",
+      "year": "2001"
+    },
+    "max": {
+      "latitude": "42.022644369",
+      "longitude": "-87.524529378",
+      "year": "2023"
+    }
+  }
+}

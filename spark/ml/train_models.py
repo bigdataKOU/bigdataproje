@@ -352,11 +352,12 @@ def main() -> int:
         ),
         (
             "naive_bayes",
+            # gaussian: lat/lon negatif olabildigi icin multinomial calismaz
             NaiveBayes(
                 labelCol="label", featuresCol="features",
-                modelType="multinomial", smoothing=1.0,
+                modelType="gaussian",
             ),
-            {"modelType": "multinomial", "smoothing": 1.0},
+            {"modelType": "gaussian"},
         ),
     ]
 

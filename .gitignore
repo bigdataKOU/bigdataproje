@@ -39,3 +39,7 @@ logs-silver-batch.txt
 logs-sweep-*.txt
 sweep-summary.txt
 sweep-summary-partial.txt
+
+# Additional pipeline runtime logs
+logs-*.txt
+
