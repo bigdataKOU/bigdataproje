@@ -5,6 +5,6 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY ratings_producer.py .
+COPY crime_producer.py .
 
-CMD ["python", "-u", "ratings_producer.py"]
+CMD ["python", "-u", "crime_producer.py"]

@@ -1,0 +1,2 @@
+rank|regParam|maxIter|run_name|status|seconds|started
+8|0.1|10|als-rank8-reg0.1-iter10|ok|130|2026-05-13T13:06:39Z

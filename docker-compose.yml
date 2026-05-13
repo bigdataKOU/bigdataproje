@@ -7,7 +7,7 @@ name: bigdataproje
 # Python degisikligi icin host ./spark senkron olmali (build tek basina yetmez).
 x-spark-volumes: &spark-volumes
   - ./spark:/opt/app
-  - ${ML25M_DIR:-../ml-25m}:/opt/data/ml-25m:ro
+  - ${CRIMES_DIR:-../crimes}:/opt/data/crimes:ro
   - delta-data:/opt/delta
   - checkpoints-data:/opt/checkpoints
   - mlruns-data:/opt/mlruns
@@ -64,8 +64,9 @@ services:
       - spark-master
     environment:
       SPARK_NO_DAEMONIZE: "true"
-      SPARK_WORKER_MEMORY: "4g"
-      SPARK_WORKER_CORES: "2"
+      # WSL2 host 12 core / 11GB. Worker'a 8 core + 6G ver.
+      SPARK_WORKER_MEMORY: "6g"
+      SPARK_WORKER_CORES: "8"
     command: ["/opt/spark/sbin/start-worker.sh", "spark://spark-master:7077"]
     volumes: *spark-volumes
 
@@ -89,14 +90,14 @@ services:
         condition: service_healthy
     environment:
       KAFKA_BROKER: kafka:9092
-      KAFKA_TOPIC_RATINGS: ratings
-      RATINGS_PATH: /opt/data/ml-25m/ratings.csv
+      KAFKA_TOPIC_CRIMES: crimes
+      CRIMES_PATH: /opt/data/crimes/Crimes.csv
       PRODUCER_MODE: ${PRODUCER_MODE:-fixed}
       PRODUCER_RATE: ${PRODUCER_RATE:-1000}
       PRODUCER_SPEEDUP: ${PRODUCER_SPEEDUP:-100000}
       PRODUCER_MAX_RECORDS: ${PRODUCER_MAX_RECORDS:-500000}
     volumes:
-      - ${ML25M_DIR:-../ml-25m}:/opt/data/ml-25m:ro
+      - ${CRIMES_DIR:-../crimes}:/opt/data/crimes:ro
     restart: "no"
 
   pipeline:
@@ -111,7 +112,7 @@ services:
         condition: service_started
     environment:
       KAFKA_BROKER: kafka:9092
-      KAFKA_TOPIC_RATINGS: ratings
+      KAFKA_TOPIC_CRIMES: crimes
       SPARK_MASTER_URL: spark://spark-master:7077
       MLFLOW_TRACKING_URI: http://mlflow:5000
       DELTA_PATH: /opt/delta
@@ -134,7 +135,7 @@ services:
     volumes:
       - ./dashboard:/app
       - delta-data:/opt/delta
-      - ${ML25M_DIR:-../ml-25m}:/opt/data/ml-25m:ro
+      - ${CRIMES_DIR:-../crimes}:/opt/data/crimes:ro
       - mlruns-data:/opt/mlruns
 
 volumes:

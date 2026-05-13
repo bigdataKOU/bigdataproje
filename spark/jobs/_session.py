@@ -25,25 +25,33 @@ def build_spark(app_name: str) -> SparkSession:
 DELTA_PATH = os.environ.get("DELTA_PATH", "/opt/delta")
 CHECKPOINT_PATH = os.environ.get("CHECKPOINT_PATH", "/opt/checkpoints")
 KAFKA_BROKER = os.environ.get("KAFKA_BROKER", "kafka:9092")
-KAFKA_TOPIC_RATINGS = os.environ.get("KAFKA_TOPIC_RATINGS", "ratings")
+KAFKA_TOPIC_CRIMES = os.environ.get("KAFKA_TOPIC_CRIMES", "crimes")
 DATA_PATH = os.environ.get("DATA_PATH", "/opt/data")
 
 
 def bronze_path() -> str:
-    return f"{DELTA_PATH}/bronze/ratings"
+    return f"{DELTA_PATH}/bronze/crimes"
 
 
 def silver_path() -> str:
-    return f"{DELTA_PATH}/silver/ratings"
+    return f"{DELTA_PATH}/silver/crimes"
 
 
-def gold_user_path() -> str:
-    return f"{DELTA_PATH}/gold/user_stats"
+def gold_type_path() -> str:
+    return f"{DELTA_PATH}/gold/type_stats"
 
 
-def gold_movie_path() -> str:
-    return f"{DELTA_PATH}/gold/movie_stats"
+def gold_district_path() -> str:
+    return f"{DELTA_PATH}/gold/district_stats"
 
 
-def movies_csv_path() -> str:
-    return f"{DATA_PATH}/ml-25m/movies.csv"
+def gold_hourly_path() -> str:
+    return f"{DELTA_PATH}/gold/hourly_stats"
+
+
+def predictions_path() -> str:
+    return f"{DELTA_PATH}/gold/predictions"
+
+
+def crimes_csv_path() -> str:
+    return f"{DATA_PATH}/crimes/Crimes.csv"
