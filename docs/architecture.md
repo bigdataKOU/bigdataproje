@@ -54,3 +54,6 @@
 - **`coldStartStrategy="drop"`**: Test kümesinde train'de görmediğimiz user/movie varsa NaN üretmek yerine satırı atar — RMSE temiz çıkar.
 - **`event_date` partitioning**: Bronze'da gün bazlı sorgu/silme verimli.
 - **MLflow SQLite**: Lokal demo için yeterli, production'da Postgres'e taşınır.
+
+
+

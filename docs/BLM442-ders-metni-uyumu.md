@@ -56,3 +56,5 @@ Metinde geçen: *Docker ile konteynerize ortam; Kafka ile streaming veri üretim
 ---
 
 *Son güncelleme: 2026 — BLM442 Büyük Veri Analizine Giriş, dönem projesi.*
+
+
