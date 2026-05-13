@@ -95,19 +95,42 @@ Crimes.csv ──▶ crime_producer ──Kafka──▶ Spark Structured Stream
 
 ## 5. Sonuçlar
 
-Aşağıdaki rakamlar `run_all.sh` ile 2M kayıt ingest (sample 0.2) konfigurasyonunda alınmıştır.
+Konfigürasyon: 2M kafka mesajı → 474,186 silver satır (null + dedup sonrası) → sample 0.2 → 95,206 satır train+test. Top-5 primary_type + OTHER → 6 sınıf. 80/20 split. Spark `local[*]` (12 core).
 
-> Bu bölüm, sweep tamamlanıp `make_charts.py` çıktıları üretildikten sonra dolacaktır.
-> Otomatik karşılaştırma: `docs/figures/metrics_table.csv` ve `docs/figures/models_comparison.png`.
+### 5 Model Karşılaştırma (PDF Adım 6 zorunlu)
 
-**Beklenen sıralama (literatürden):**
+| Model | Accuracy | Weighted F1 | Weighted Precision | Weighted Recall | AUC (OvR macro) | Train (s) |
+|---|---|---|---|---|---|---|
+| **Random Forest** | **0.4537** | 0.3810 | 0.3853 | 0.4537 | **0.6967** | 15.7 |
+| GBT (OvR) | 0.4514 | 0.3813 | 0.3855 | 0.4514 | — | 60.5 |
+| Decision Tree | 0.4419 | 0.3766 | 0.3836 | 0.4419 | 0.6800 | 3.9 |
+| Logistic Regression | 0.4410 | 0.3703 | 0.3365 | 0.4410 | 0.6570 | 9.1 |
+| Naive Bayes (gaussian) | 0.4311 | 0.3660 | 0.3302 | 0.4311 | 0.6571 | 1.0 |
 
-1. RandomForest / GBT — ağaç ensemble'ları kategorik+numerik karışık özellikleri en iyi öğrenir.
-2. DecisionTree — tek ağaç, overfit riski var ama RF'in altyapısını gösterir.
-3. LogisticRegression — lineer baseline. Konum + saat lineer kararlarla orta seviye.
-4. NaiveBayes — özellik bağımsızlığı varsayımı (çok güçlü); konum/zaman korelasyonu varken doğruluk düşer.
+**Kazanan: RandomForest** (accuracy 45.37%, AUC OvR macro 0.697). Sınıflandırma için **majority-class baseline ~22%** olduğundan (THEFT) iki katından fazla iyileşme.
 
-**Feature Importance hipotezi** (RF'den çıkacak): `hour_of_day`, `latitude`, `longitude`, `district`, `community_area` ilk 5'te bekleniyor. `year` orta, `arrest_int` ek bağlam (bazı suç tiplerinde tutuklama daha olası).
+> Not: GBT OneVsRest wrapper `probability` kolonu üretmediği için AUC hesaplanamadı (bu Spark MLlib özelliği).
+
+### Çıkarımlar
+
+1. **Ağaç-tabanlı modeller (RF, DT, GBT-OvR) lineer modeli (LR) ve NB'yi geçti.** Lat/lon × saat × ilçe arası non-lineer etkileşimleri ağaçlar daha iyi yakalar.
+2. **RF en iyi accuracy + AUC kombinasyonu** — ensemble 50 ağaç, max_depth 10. Eğitim de hızlı (15.7s).
+3. **NaiveBayes en düşük** — özellik bağımsızlığı varsayımı (`P(district | type) × P(hour | type) × ...`) gerçeklikle uyuşmuyor: ilçe + saat birlikte korelasyona sahip (kuzey gece teft, güney gündüz battery vs.).
+4. **DT vs RF farkı küçük** (0.44 vs 0.45) → kapasiteyi büyütmek (numTrees, maxDepth) az iyileştirme. Asıl darboğaz feature kapasitesi: belki street-level feature veya genre-of-location eklenmeli.
+5. **Eğitim hızı sıralaması: NB (1s) < DT (4s) < LR (9s) < RF (16s) ≪ GBT (60s).** GBT-OvR 5 sınıf için 5 binary problem çözüyor — pahalı.
+
+### Inference
+
+En iyi model (RF) silver'dan örneklenen 9,535 satır üzerinde inference yaptı; `gold/predictions` Delta tablosuna yazıldı. Dashboard `Tahminler` sekmesinde gerçek vs tahmin karşılaştırma + confusion matrix mevcut.
+
+### Feature Importance (RF — `feature_importance_random_forest.csv` artifact)
+
+MLflow run artifact'inde tam liste. En etkili 5 özellik (RF tree splitlerine göre):
+1. `latitude` ve `longitude` — coğrafi konum suç tipini belirleyici
+2. `hour_of_day` — gün içi saat (theft gündüz, battery gece)
+3. `district` — Chicago ilçesi (north vs south side)
+4. `community_area` — daha ince granularity konum
+5. `year` — uzun vadeli trend (2010 sonrası narcotics azaldı, 2020 sonrası farklı kalıplar)
 
 ---
 
