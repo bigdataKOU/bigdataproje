@@ -167,41 +167,89 @@ def confusion_matrix_chart(best_run, fname: str):
     print(f"wrote {OUT_DIR / fname}")
 
 
+import tempfile
+import shutil
+
 def roc_curve_proxy(best_run, fname: str):
-    """ROC curve gerçek probability'lerden ideal olarak hesaplanır; MLflow'da
-    skor kolonu yok. Bunun yerine per-class precision/recall'dan iso-curve
-    sketch'i yaparız (informational). Eğer per_class CSV varsa kullanırız."""
-    if best_run is None:
+    """
+    ROC curve yerine per-class Precision-Recall dağılımını görselleştirir.
+    Artifact indirme işlemi geçici dizin (tempdir) üzerinden yapılarak güvenli hale getirilmiştir.
+    """
+    if not best_run or "run_id" not in best_run:
+        logger.warning("ROC proxy: Geçerli bir run_id bulunamadı.")
         return
+
     mlflow.set_tracking_uri(TRACKING_URI)
     client = mlflow.tracking.MlflowClient()
+    
+    # Geçici bir klasör kullanarak artifact çakışmalarını önleyelim
+    temp_dir = tempfile.mkdtemp()
+    
     try:
-        local_dir = client.download_artifacts(best_run["run_id"], ".")
-        per_class_path = os.path.join(
-            local_dir, f"per_class_{best_run['model_type']}.csv"
-        )
-        if not os.path.exists(per_class_path):
+        # Sadece gerekli olan dosyayı indir (tüm artifactleri değil)
+        file_name = f"per_class_{best_run['model_type']}.csv"
+        local_path = client.download_artifacts(best_run["run_id"], file_name, temp_dir)
+        
+        if not os.path.exists(local_path):
             return
-        pc = pd.read_csv(per_class_path)
-    except Exception:
-        return
-    fig, ax = plt.subplots(figsize=(7, 5.5))
-    # Precision-Recall noktaları — multi-class için bir özet
-    ax.scatter(pc["recall"], pc["precision"], s=80)
-    for _, r in pc.iterrows():
-        ax.annotate(r["label"], (r["recall"], r["precision"]),
-                    textcoords="offset points", xytext=(6, 4), fontsize=8)
-    ax.set_xlabel("Recall")
-    ax.set_ylabel("Precision")
-    ax.set_xlim(0, 1.05)
-    ax.set_ylim(0, 1.05)
-    ax.set_title(f"Precision-Recall (per-class) — {best_run['model_type']}\n"
-                 f"(AUC OvR macro = {best_run.get('auc_ovr_macro', float('nan')):.3f})")
-    ax.grid(True, alpha=0.3)
-    fig.tight_layout()
-    fig.savefig(OUT_DIR / fname, dpi=150)
-    plt.close(fig)
-    print(f"wrote {OUT_DIR / fname}")
+            
+        pc = pd.read_csv(local_path)
+        
+        # Grafik oluşturma
+        fig, ax = plt.subplots(figsize=(8, 6))
+        
+        # Renk paleti ekleyerek sınıfları görsel olarak ayıralım
+        scatter = ax.scatter(
+            pc["recall"], 
+            pc["precision"], 
+            c=pc["precision"], # Renk doygunluğu hassasiyete göre değişir
+            cmap="viridis",
+            s=100, 
+            edgecolors="black", 
+            alpha=0.7
+        )
+        
+        # Etiketlerin çakışmasını önlemek için basit bir offset veya kontrol
+        for _, r in pc.iterrows():
+            ax.annotate(
+                r["label"], 
+                (r["recall"], r["precision"]),
+                textcoords="offset points", 
+                xytext=(8, 5), 
+                fontsize=9,
+                fontweight='semibold'
+            )
+        
+        # Eksen ve Başlık Ayarları
+        ax.set_xlabel("Recall (Duyarlılık)")
+        ax.set_ylabel("Precision (Kesinlik)")
+        ax.set_xlim(0, 1.1)
+        ax.set_ylim(0, 1.1)
+        
+        auc_val = best_run.get('auc_ovr_macro')
+        auc_str = f"{auc_val:.3f}" if auc_val is not None else "N/A"
+        
+        ax.set_title(
+            f"Sınıf Bazlı Precision-Recall — {best_run['model_type']}\n"
+            f"AUC OvR Macro: {auc_str}", 
+            fontsize=12, pad=15
+        )
+        
+        ax.grid(True, linestyle='--', alpha=0.5)
+        plt.colorbar(scatter, ax=ax, label='Kesinlik Skoru')
+        
+        # Kaydetme
+        save_path = OUT_DIR / fname
+        fig.tight_layout()
+        fig.savefig(save_path, dpi=150, bbox_inches='tight')
+        plt.close(fig)
+        print(f"[viz] Grafik kaydedildi: {save_path}")
+
+    except Exception as e:
+        print(f"[viz] ROC curve proxy hatası: {e}")
+    finally:
+        # Temizlik: Geçici klasörü her durumda siliyoruz
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 def time_series_charts(eda_summary_path: str):
