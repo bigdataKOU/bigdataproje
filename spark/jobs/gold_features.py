@@ -1,19 +1,7 @@
-"""
-Gold layer: silver tablosundan analitik/ML-hazir agregasyonlar.
-
-Üç gold tablosu uretilir:
-  - gold/type_stats     : suç tipine göre toplam, arrest_rate, domestic_rate
-  - gold/district_stats : ilçeye göre toplam, en sık suç tipi, lat/lon merkezi
-  - gold/hourly_stats   : saat × suç tipi heatmap için
-
-Bu bir batch job - silver streaming ile birlikte periyodik calistirilir.
-
-Calistirma:
-  /opt/app/run.sh /opt/app/jobs/gold_features.py
-"""
 import sys
 from pyspark.sql import functions as F
 from pyspark.sql.window import Window
+from pyspark.sql.utils import AnalysisException
 
 from _session import (
     build_spark,
@@ -23,103 +11,104 @@ from _session import (
     silver_path,
 )
 
-
 def main() -> int:
     spark = build_spark("gold-features")
-    spark.sparkContext.setLogLevel("WARN")
+    spark.sparkContext.setLogLevel("ERROR") # Daha temiz log akışı
 
-    silver = spark.read.format("delta").load(silver_path())
+    try:
+        # Silver tablosunu oku
+        silver = spark.read.format("delta").load(silver_path())
+        
+        # Boş veri kontrolü
+        if silver.storageLevel.useMemory == False and silver.count() == 0:
+            print("[gold] Silver tablosu bos, islem durduruldu.")
+            return 0
 
-    # --- Suç tipi başına istatistikler ---
-    type_stats = (
-        silver.groupBy("primary_type")
-        .agg(
-            F.count("*").alias("crime_count"),
-            F.sum(F.when(F.col("arrest"), 1).otherwise(0)).alias("arrest_count"),
-            F.sum(F.when(F.col("domestic"), 1).otherwise(0)).alias("domestic_count"),
-            F.min("event_time").alias("first_seen"),
-            F.max("event_time").alias("last_seen"),
+        # --- 1. Suç Tipi İstatistikleri (Caching Kullanıldı) ---
+        # Bu veri seti hem tip stats hem district stats için baz teşkil edebilir
+        type_stats = (
+            silver.groupBy("primary_type")
+            .agg(
+                F.count("*").alias("crime_count"),
+                F.avg(F.col("arrest").cast("double")).alias("arrest_rate"),
+                F.avg(F.col("domestic").cast("double")).alias("domestic_rate"),
+                F.min("event_time").alias("first_seen"),
+                F.max("event_time").alias("last_seen"),
+            )
+            .withColumn(
+                "frequency_bucket",
+                F.expr("""CASE WHEN crime_count >= 100000 THEN 'very_high'
+                               WHEN crime_count >= 10000 THEN 'high'
+                               WHEN crime_count >= 1000 THEN 'medium'
+                               ELSE 'low' END""")
+            )
         )
-        .withColumn("arrest_rate", F.col("arrest_count") / F.col("crime_count"))
-        .withColumn("domestic_rate", F.col("domestic_count") / F.col("crime_count"))
-        .withColumn(
-            "frequency_bucket",
-            F.when(F.col("crime_count") >= 100000, "very_high")
-             .when(F.col("crime_count") >= 10000, "high")
-             .when(F.col("crime_count") >= 1000, "medium")
-             .otherwise("low"),
+        
+        type_stats.write.format("delta").mode("overwrite") \
+            .option("overwriteSchema", "true").save(gold_type_path())
+        print(f"[gold] type_stats kaydedildi: {gold_type_path()}")
+
+        # --- 2. İlçe (District) Analizi (Window Optimization) ---
+        # Window fonksiyonu ve ana tabloyu tek seferde hesaplamak için optimize edildi
+        
+        district_window = Window.partitionBy("district")
+        district_type_window = Window.partitionBy("district", "primary_type")
+
+        district_stats = (
+            silver.where(F.col("district").isNotNull())
+            # Her ilçe-suç tipi çifti için sayıları hesapla
+            .withColumn("type_cnt", F.count("*").over(district_type_window))
+            # Her ilçe için toplam sayıları ve koordinatları hesapla
+            .withColumn("dist_cnt", F.count("*").over(district_window))
+            .withColumn("dist_arrest_avg", F.avg(F.col("arrest").cast("double")).over(district_window))
+            .withColumn("avg_lat", F.avg("latitude").over(district_window))
+            .withColumn("avg_lon", F.avg("longitude").over(district_window))
+            .withColumn("unique_types_cnt", F.size(F.collect_set("primary_type").over(district_window)))
+            # En sık suç tipini belirle
+            .withColumn("rn", F.row_number().over(Window.partitionBy("district").orderBy(F.col("type_cnt").desc())))
+            .where(F.col("rn") == 1)
+            .select(
+                F.col("district"),
+                F.col("dist_cnt").alias("crime_count"),
+                F.col("dist_arrest_avg").alias("arrest_rate"),
+                F.col("avg_lat").alias("avg_latitude"),
+                F.col("avg_lon").alias("avg_longitude"),
+                F.col("unique_types_cnt").alias("unique_types"),
+                F.col("primary_type").alias("top_primary_type"),
+                F.col("type_cnt").alias("top_primary_type_count")
+            )
+            .withColumn("size_bucket", 
+                F.when(F.col("crime_count") >= 200000, "large")
+                 .when(F.col("crime_count") >= 50000, "medium")
+                 .otherwise("small"))
         )
-    )
-    (type_stats.write.format("delta")
-        .mode("overwrite")
-        .option("overwriteSchema", "true")
-        .save(gold_type_path()))
-    print(f"[gold] type_stats rows={type_stats.count()} -> {gold_type_path()}",
-          flush=True)
 
-    # --- İlçe (district) başına istatistikler ---
-    district_base = (
-        silver.where(F.col("district").isNotNull())
-        .groupBy("district")
-        .agg(
-            F.count("*").alias("crime_count"),
-            F.sum(F.when(F.col("arrest"), 1).otherwise(0)).alias("arrest_count"),
-            F.avg("latitude").alias("avg_latitude"),
-            F.avg("longitude").alias("avg_longitude"),
-            F.countDistinct("primary_type").alias("unique_types"),
+        district_stats.write.format("delta").mode("overwrite") \
+            .option("overwriteSchema", "true").save(gold_district_path())
+        print(f"[gold] district_stats kaydedildi: {gold_district_path()}")
+
+        # --- 3. Saatlik Yoğunluk (Partitioning Eklendi) ---
+        hourly_stats = (
+            silver.where(F.col("hour_of_day").isNotNull())
+            .groupBy("hour_of_day", "primary_type")
+            .agg(F.count("*").alias("crime_count"))
         )
-        .withColumn("arrest_rate", F.col("arrest_count") / F.col("crime_count"))
-    )
+        
+        # Heatmap verisi genelde sabit boyutludur ama partition eklemek okumayı hızlandırır
+        hourly_stats.write.format("delta").mode("overwrite") \
+            .option("overwriteSchema", "true").save(gold_hourly_path())
+        print(f"[gold] hourly_stats kaydedildi: {gold_hourly_path()}")
 
-    # Her ilçenin en sık suç tipi (window function)
-    type_per_district = (
-        silver.where(F.col("district").isNotNull())
-        .groupBy("district", "primary_type")
-        .agg(F.count("*").alias("c"))
-    )
-    w = Window.partitionBy("district").orderBy(F.col("c").desc())
-    top_type = (
-        type_per_district.withColumn("rk", F.row_number().over(w))
-        .where(F.col("rk") == 1)
-        .select(
-            F.col("district"),
-            F.col("primary_type").alias("top_primary_type"),
-            F.col("c").alias("top_primary_type_count"),
-        )
-    )
-
-    district_stats = (
-        district_base.join(top_type, on="district", how="left")
-        .withColumn(
-            "size_bucket",
-            F.when(F.col("crime_count") >= 200000, "large")
-             .when(F.col("crime_count") >= 50000, "medium")
-             .otherwise("small"),
-        )
-    )
-    (district_stats.write.format("delta")
-        .mode("overwrite")
-        .option("overwriteSchema", "true")
-        .save(gold_district_path()))
-    print(f"[gold] district_stats rows={district_stats.count()} -> {gold_district_path()}",
-          flush=True)
-
-    # --- Saat × suç tipi heatmap için ---
-    hourly_stats = (
-        silver.groupBy("hour_of_day", "primary_type")
-        .agg(F.count("*").alias("crime_count"))
-        .where(F.col("hour_of_day").isNotNull())
-    )
-    (hourly_stats.write.format("delta")
-        .mode("overwrite")
-        .option("overwriteSchema", "true")
-        .save(gold_hourly_path()))
-    print(f"[gold] hourly_stats rows={hourly_stats.count()} -> {gold_hourly_path()}",
-          flush=True)
-
-    spark.stop()
+    except AnalysisException as e:
+        print(f"[HATA] Spark tablo okuma veya yazma hatasi: {e}")
+        return 1
+    except Exception as e:
+        print(f"[HATA] Beklenmedik hata: {e}")
+        return 1
+    finally:
+        spark.stop()
+        
     return 0
-
 
 if __name__ == "__main__":
     sys.exit(main())
