@@ -165,19 +165,23 @@ def per_class_metrics(predictions: DataFrame, labels: list[str]) -> pd.DataFrame
 
 
 def multi_class_auc(predictions: DataFrame, labels: list[str]) -> float:
-    """OvR macro AUC. predictions'da 'probability' kolonu olmali."""
+    """OvR macro AUC. predictions'da 'probability' kolonu olmali (Vector)."""
     if "probability" not in predictions.columns:
         return float("nan")
+    try:
+        from pyspark.ml.functions import vector_to_array
+        arr_col = vector_to_array("probability")
+    except Exception:
+        return float("nan")
+
     aucs = []
     for i in range(len(labels)):
-        # i. sinif icin OvR: pozitif label = i, negatif = digerleri
-        bin_df = predictions.select(
-            F.col("label").alias("orig_label"),
-            F.expr(f"CASE WHEN label = {i} THEN 1.0 ELSE 0.0 END").alias("bin_label"),
-            # probability VectorUDT -> i'inci eleman
-            F.expr(f"element_at(vector_to_array(probability), {i + 1})").alias("score"),
-        )
         try:
+            bin_df = predictions.select(
+                F.expr(f"CASE WHEN label = {i} THEN 1.0 ELSE 0.0 END")
+                    .alias("bin_label"),
+                arr_col.getItem(i).alias("score"),
+            )
             ev = BinaryClassificationEvaluator(
                 labelCol="bin_label",
                 rawPredictionCol="score",
@@ -262,10 +266,13 @@ def log_per_model(name, model, predictions, labels, train_seconds, params=None):
         mlflow.log_metric(key, value)
         print(f"[{name}] {key}={value:.4f}", flush=True)
 
-    auc = multi_class_auc(predictions, labels)
-    if not np.isnan(auc):
-        mlflow.log_metric("auc_ovr_macro", auc)
-        print(f"[{name}] auc_ovr_macro={auc:.4f}", flush=True)
+    try:
+        auc = multi_class_auc(predictions, labels)
+        if not np.isnan(auc):
+            mlflow.log_metric("auc_ovr_macro", auc)
+            print(f"[{name}] auc_ovr_macro={auc:.4f}", flush=True)
+    except Exception as exc:
+        print(f"[{name}] auc hesabi atlandi: {exc}", flush=True)
 
     cm = confusion_matrix(predictions, labels)
     cm_csv = f"/tmp/cm_{name}.csv"
