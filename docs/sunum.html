@@ -293,7 +293,7 @@
   .icon-item .txt b { color: var(--text); }
   .icon-item .txt small { display: block; color: var(--text-light); font-size: 0.9em; margin-top: 3px; }
 
-  /* PDF badge */
+  /* Section badge */
   .badge {
     display: inline-block;
     background: var(--primary); color: white;
@@ -349,7 +349,7 @@
   </div>
   <aside class="notes">
     Hoş geldiniz. 10-15 dakikalık bir sunum yapacağız. Chicago Crimes veriseti
-    üzerinde PDF'in 7 adımının her birini somut bileşenlerle gerçekleştirdik.
+    üzerinde uçtan uca büyük veri pipeline'ının her aşamasını somut bileşenlerle gerçekleştirdik.
   </aside>
 </section>
 
@@ -370,7 +370,7 @@
     <div class="icon-item">
       <div class="ico">🎯</div>
       <div class="txt"><b>ML görevi:</b> Çoklu sınıf <code>Primary Type</code> tahmin
-        <small>PDF metni: "suç tipi ve bölge tahmini"</small></div>
+        <small>Proje tanımı: "suç tipi ve bölge tahmini"</small></div>
     </div>
     <div class="icon-item">
       <div class="ico">⚖️</div>
@@ -432,9 +432,9 @@
   </aside>
 </section>
 
-<!-- ========== Slayt 5: PDF adımları ========== -->
+<!-- ========== Slayt 5: Pipeline adımları ========== -->
 <section>
-  <h2>PDF Adımları Eşleştirmesi</h2>
+  <h2>Pipeline Adımları</h2>
   <div class="step-grid">
     <div class="step-card">
       <div class="num">Adım 1 + 2</div>
@@ -457,18 +457,18 @@
       <div class="desc">02_feature_engineering.py: 13 özellik (zaman, konum, koordinat, bağlam)</div>
     </div>
     <div class="step-card wide">
-      <div class="num">Adım 6 — En kritik 🎯</div>
+      <div class="num">ML Modelleri 🎯</div>
       <div class="title-h">5 ML Modeli + MLflow</div>
       <div class="desc">LR + DT + RF + GBT(OvR) + NB · her run için Feature Importance + Confusion Matrix + AUC + per-class metric + model registry</div>
     </div>
     <div class="step-card wide">
       <div class="num">Adım 7</div>
       <div class="title-h">Dashboard + Görseller</div>
-      <div class="desc">Streamlit 5 sekme + interaktif HTML rapor · PDF'in tüm zorunlu görselleri (5 model bar, FI hbar, CM, ROC, time series, histogram, pie)</div>
+      <div class="desc">Streamlit 5 sekme + interaktif HTML rapor · 5 model bar, Feature Importance hbar, Confusion Matrix, ROC, time series, histogram, pie</div>
     </div>
   </div>
   <aside class="notes">
-    PDF'in 7 adımı 6 somut bileşene eşlenir. En kritik adım 6 (5 model + MLflow + zorunlu artifact'ler).
+    Pipeline'ın 7 aşaması 6 somut bileşene karşılık geliyor. En kritik adım 5 model + MLflow artifact'leri.
   </aside>
 </section>
 
@@ -515,7 +515,7 @@
 
 <!-- ========== Slayt 7: Features ========== -->
 <section>
-  <h2>Adım 5 — 13 Özellik <span class="badge">PDF en az 5</span></h2>
+  <h2>Feature Engineering — 13 Özellik</h2>
   <div style="margin-top: 20px;">
     <h3>⏰ Zaman özellikleri (4)</h3>
     <div class="feature-pills">
@@ -546,14 +546,14 @@
     · <code>gold/feature_view</code> Delta tablosuna materyalize edildi
   </p>
   <aside class="notes">
-    PDF en az 5 özellik istiyor. Biz 13 ürettik; her birinin neden faydalı olduğunu docstring'de yazdık.
+    13 farklı özellik tasarladık; her birinin iş mantığı kodun docstring'inde yazıyor.
     Theft öğleden sonra, battery gece — hour_of_day güçlü sinyal.
   </aside>
 </section>
 
 <!-- ========== Slayt 8: 5 Model ========== -->
 <section>
-  <h2>5 ML Modeli Karşılaştırması <span class="badge">Adım 6</span></h2>
+  <h2>5 ML Modeli Karşılaştırması</h2>
   <table>
     <thead><tr><th>Model</th><th>Accuracy</th><th>F1</th><th>AUC</th><th>Train</th></tr></thead>
     <tbody>
@@ -585,7 +585,7 @@
 
 <!-- ========== Slayt 9: Feature Importance ========== -->
 <section>
-  <h2>Feature Importance <span class="badge">PDF Zorunlu</span></h2>
+  <h2>Feature Importance</h2>
   <p style="font-size:0.65em; color:var(--text-light); margin-bottom:18px;">
     En iyi modelin (Random Forest) split önemine göre <b>en etkili 5 özellik</b>:
   </p>
@@ -656,7 +656,7 @@
     Her sorun bir öğrenim noktası: Spark streaming + Kafka entegrasyonu, Delta lake operations, GBT wrapper trick'leri
   </p>
   <aside class="notes">
-    6 ana zorluk + çözümü. Hepsi PDF metnindeki teknolojilerle ilgili pratik tecrübe.
+    6 ana zorluk + çözümü. Hepsi Spark + Delta + Kafka + MLflow ekosistemindeki pratik tecrübe.
   </aside>
 </section>
 
