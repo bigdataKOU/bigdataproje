@@ -112,8 +112,8 @@ Bu dosya sırayla hangi dosyada ne yapıldığını tutuyor; sunum ve takım ark
 - `scripts/verify.sh` — compose config + py_compile + bash -n + dockerfile + dataset + requirements.
 
 ## 17. Branch geçmişi
-- `main` → `feat/pipeline-bootstrap` → `feat/hyperparam-sweep` (MovieLens son hali) → `feat/chicago-crimes` (mevcut, tam rewrite).
-- Veri seti pivot (MovieLens → Chicago Crimes): proje sonunda form bilgilerine uyum sağlamak için tam yeniden yazım.
+- Tüm branchler artık aynı Chicago Crimes pipeline tabanını taşıyor.
+- Çalışma branch'i: `feat/chicago-crimes` → `main` üzerine merge edilir.
 
 ## 18. Test edilen
 - `make verify` ✅

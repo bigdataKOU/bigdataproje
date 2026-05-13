@@ -1,6 +1,5 @@
 # Data
-data/ml-25m/
-data/ml-25m.zip
+data/crimes/
 data/*.csv
 
 # Delta Lake & Spark output

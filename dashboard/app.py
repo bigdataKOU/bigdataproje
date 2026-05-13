@@ -280,6 +280,7 @@ with tab_mlflow:
             for r in runs:
                 rows.append({
                     "run_id": r.info.run_id[:8],
+                    "model": r.data.params.get("model_type", "?"),
                     "run_name": r.data.tags.get("mlflow.runName", ""),
                     "numTrees": int(r.data.params.get("numTrees", 0) or 0) or None,
                     "maxDepth": int(r.data.params.get("maxDepth", 0) or 0) or None,
@@ -287,14 +288,31 @@ with tab_mlflow:
                     "weighted_f1": r.data.metrics.get("weighted_f1"),
                     "weighted_precision": r.data.metrics.get("weighted_precision"),
                     "weighted_recall": r.data.metrics.get("weighted_recall"),
+                    "auc_ovr_macro": r.data.metrics.get("auc_ovr_macro"),
                     "train_seconds": r.data.metrics.get("train_seconds"),
                     "n_rows": int(r.data.params.get("n_rows", 0) or 0) or None,
                 })
             df = pd.DataFrame(rows).dropna(subset=["accuracy"])
+            df = df.sort_values("accuracy", ascending=False) \
+                   .drop_duplicates("model").reset_index(drop=True)
             if df.empty:
                 st.info("Henüz tamamlanmış run yok.")
             else:
-                st.dataframe(df, use_container_width=True, hide_index=True)
+                # None'ları "—" olarak göster, metrikleri yuvarla
+                df_display = df.copy()
+                for c in ["accuracy", "weighted_f1", "weighted_precision",
+                          "weighted_recall", "auc_ovr_macro"]:
+                    df_display[c] = df_display[c].apply(
+                        lambda v: f"{v:.4f}" if pd.notna(v) else "—"
+                    )
+                df_display["train_seconds"] = df_display["train_seconds"].apply(
+                    lambda v: f"{v:.1f}s" if pd.notna(v) else "—"
+                )
+                for c in ["numTrees", "maxDepth", "n_rows"]:
+                    df_display[c] = df_display[c].apply(
+                        lambda v: f"{int(v):,}" if pd.notna(v) else "—"
+                    )
+                st.dataframe(df_display, use_container_width=True, hide_index=True)
 
                 tree_sweep = df[df["maxDepth"] == df["maxDepth"].mode().iloc[0]].sort_values("numTrees")
                 if len(tree_sweep) >= 2:

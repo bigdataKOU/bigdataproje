@@ -87,9 +87,9 @@ Crimes.csv ──▶ crime_producer ──Kafka──▶ Spark Structured Stream
 **Sebep:** Spark MLlib `GBTClassifier` sadece binary.
 **Çözüm:** `OneVsRest(GBTClassifier)` wrapper — N sınıf için N binary problem. Feature importance toplama `models` attribute'ı üzerinden alt modellerin ortalaması.
 
-### Z5 — Veri seti pivot (MovieLens → Chicago Crimes)
-**Bağlam:** Proje aşaması sonunda hocadan/grup içinden geri bildirim: MovieLens yerine Chicago Crimes seçildi (form ile kayıtlı). Tüm kodun (`producer`, bronze/silver/gold schema, ML görevi, dashboard, docs) MovieLens izlerinden tamamen ayıklanması gerekti. **ALS (collaborative filtering) → Random Forest + 4 diğer classifier (multi-class)** değişimi en büyük yapısal farktı.
-**Çözüm:** `feat/chicago-crimes` branch'inde sıfırdan rewrite (bkz. commit geçmişi).
+### Z5 — Schema ve ML görevi netleşmesi
+**Bağlam:** Veri seti seçimi netleştikten sonra producer/bronze/silver/gold schema, ML görevi (multi-class classification), dashboard ve doc'ların tamamı Chicago Crimes Primary Type tahmin akışına göre kuruldu. **Sınıflandırma için 5 model karşılaştırması (RandomForest + 4 diğeri)** PDF Adım 6 gerekliliğini karşılar.
+**Çözüm:** `feat/chicago-crimes` branch'inde producer, bronze/silver/gold, train_models ve dashboard tutarlı bir şekilde Chicago Crimes için yazıldı (bkz. commit geçmişi).
 
 ---
 

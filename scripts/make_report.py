@@ -515,9 +515,9 @@ Crimes.csv ──▶ crime_producer ──Kafka──▶ Spark Structured Stream
   <td><code>pyspark.ml.functions.vector_to_array</code> Python import</td>
 </tr>
 <tr>
-  <td>Veri seti pivot (MovieLens → Chicago Crimes)</td>
-  <td>Form/onay sonucu seçim değişti</td>
-  <td><code>feat/chicago-crimes</code> branch'inde sıfırdan tam rewrite</td>
+  <td>İlk pipeline iskeleti farklı dataset için yazılmıştı</td>
+  <td>Form/onay sonucu Chicago Crimes seçildi</td>
+  <td><code>feat/chicago-crimes</code> branch'inde Chicago Crimes için tam rewrite</td>
 </tr>
 </table>
 

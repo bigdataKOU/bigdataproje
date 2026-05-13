@@ -162,7 +162,7 @@ Her özelliğin **iş mantığı docstring'de** (örn. "battery gece, theft gün
 | Dashboard count_rows() askıda | Delta `add_actions.num_records` (transaction log) |
 | GBT multi-class yok | `OneVsRest` wrapper |
 | NB multinomial neg değerlere kırılıyor | `modelType="gaussian"` |
-| Veri seti pivot (MovieLens → Crimes) | `feat/chicago-crimes` branch'inde tam rewrite |
+| Pipeline iskeletinin Chicago Crimes'a uyarlanması | `feat/chicago-crimes` branch'inde tutarlı schema + ML görevi rewrite |
 
 ---
 
