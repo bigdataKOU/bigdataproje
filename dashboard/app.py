@@ -1,4 +1,4 @@
-"""Streamlit dashboard: pipeline saglik durumu + ALS oneri demosu."""
+"""Streamlit dashboard: Chicago Crimes pipeline + classifier demo."""
 import os
 from pathlib import Path
 
@@ -9,16 +9,17 @@ import streamlit as st
 from deltalake import DeltaTable
 
 DELTA_PATH = Path(os.environ.get("DELTA_PATH", "/opt/delta"))
-RECS_PATH = DELTA_PATH / "gold" / "user_recommendations"
-GOLD_MOVIE_PATH = DELTA_PATH / "gold" / "movie_stats"
-GOLD_USER_PATH = DELTA_PATH / "gold" / "user_stats"
-BRONZE_PATH = DELTA_PATH / "bronze" / "ratings"
-SILVER_PATH = DELTA_PATH / "silver" / "ratings"
+BRONZE_PATH = DELTA_PATH / "bronze" / "crimes"
+SILVER_PATH = DELTA_PATH / "silver" / "crimes"
+GOLD_TYPE_PATH = DELTA_PATH / "gold" / "type_stats"
+GOLD_DISTRICT_PATH = DELTA_PATH / "gold" / "district_stats"
+GOLD_HOURLY_PATH = DELTA_PATH / "gold" / "hourly_stats"
+PREDICTIONS_PATH = DELTA_PATH / "gold" / "predictions"
 MLFLOW_TRACKING_URI = os.environ.get("MLFLOW_TRACKING_URI", "http://mlflow:5000")
 
-st.set_page_config(page_title="MovieLens Pipeline", layout="wide")
-st.title("MovieLens Big Data Pipeline")
-st.caption("Kafka → Spark Streaming → Delta Lake → ALS → MLflow")
+st.set_page_config(page_title="Chicago Crimes Pipeline", layout="wide")
+st.title("Chicago Crimes — Big Data Pipeline")
+st.caption("Kafka → Spark Structured Streaming → Delta Lake → Random Forest → MLflow")
 
 
 @st.cache_data(ttl=30)
@@ -40,61 +41,211 @@ def read_delta_count(path: str):
 col1, col2, col3, col4 = st.columns(4)
 bronze_n = read_delta_count(str(BRONZE_PATH))
 silver_n = read_delta_count(str(SILVER_PATH))
-movies_n = read_delta_count(str(GOLD_MOVIE_PATH))
-users_n = read_delta_count(str(GOLD_USER_PATH))
-col1.metric("Bronze rows", f"{bronze_n:,}" if bronze_n is not None else "—")
-col2.metric("Silver rows", f"{silver_n:,}" if silver_n is not None else "—")
-col3.metric("Movies (gold)", f"{movies_n:,}" if movies_n is not None else "—")
-col4.metric("Users (gold)", f"{users_n:,}" if users_n is not None else "—")
+types_n = read_delta_count(str(GOLD_TYPE_PATH))
+districts_n = read_delta_count(str(GOLD_DISTRICT_PATH))
+col1.metric("Bronze events", f"{bronze_n:,}" if bronze_n is not None else "—")
+col2.metric("Silver events", f"{silver_n:,}" if silver_n is not None else "—")
+col3.metric("Suç tipi (gold)", f"{types_n:,}" if types_n is not None else "—")
+col4.metric("İlçe (district)", f"{districts_n:,}" if districts_n is not None else "—")
 
-tab_overview, tab_recs, tab_mlflow = st.tabs(
-    ["📊 Genel", "🎬 Öneriler", "🧪 MLflow"]
+
+@st.cache_data(ttl=60)
+def best_run_summary():
+    try:
+        mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+        client = mlflow.tracking.MlflowClient()
+        exp = client.get_experiment_by_name(
+            os.environ.get("MLFLOW_EXPERIMENT", "chicago-crimes-classifier")
+        )
+        if exp is None:
+            return None
+        runs = client.search_runs(exp.experiment_id, max_results=50)
+        best = None
+        for r in runs:
+            acc = r.data.metrics.get("accuracy")
+            if acc is None:
+                continue
+            if best is None or acc > best[0]:
+                best = (acc, r)
+        if best is None:
+            return None
+        r = best[1]
+        return {
+            "accuracy": best[0],
+            "weighted_f1": r.data.metrics.get("weighted_f1"),
+            "name": r.data.tags.get("mlflow.runName", r.info.run_id[:8]),
+            "numTrees": r.data.params.get("numTrees"),
+            "maxDepth": r.data.params.get("maxDepth"),
+            "train_seconds": r.data.metrics.get("train_seconds"),
+        }
+    except Exception:
+        return None
+
+
+best = best_run_summary()
+if best:
+    f1_str = f"{best['weighted_f1']:.4f}" if best.get('weighted_f1') is not None else "—"
+    ts_str = f"{best['train_seconds']:.0f}s" if best.get('train_seconds') is not None else "—"
+    st.success(
+        f"🏆 En iyi model: **{best['name']}** — accuracy = **{best['accuracy']:.4f}**, "
+        f"weighted F1 = {f1_str}, "
+        f"numTrees={best['numTrees']}, maxDepth={best['maxDepth']}, "
+        f"eğitim={ts_str}"
+    )
+
+
+tab_overview, tab_district, tab_hourly, tab_preds, tab_mlflow = st.tabs(
+    ["📊 Genel", "🗺️ İlçe", "🕒 Saat", "🔮 Tahminler", "🧪 MLflow"]
 )
 
 with tab_overview:
-    st.subheader("Top 20 film (rating sayısı)")
-    movies = read_delta(str(GOLD_MOVIE_PATH))
-    if movies is not None and not movies.empty:
-        top = movies.nlargest(20, "rating_count")
+    st.subheader("Suç tipi başına toplam (top 20)")
+    types = read_delta(str(GOLD_TYPE_PATH))
+    if types is not None and not types.empty:
+        top = types.nlargest(20, "crime_count")
         fig = px.bar(
-            top,
-            x="rating_count", y="title",
+            top.sort_values("crime_count"),
+            x="crime_count", y="primary_type",
             orientation="h",
-            color="avg_rating",
-            color_continuous_scale="Viridis",
-            hover_data=["genres", "popularity_bucket"],
+            color="arrest_rate",
+            color_continuous_scale="RdYlGn_r",
+            hover_data=["domestic_rate", "frequency_bucket"],
         )
-        fig.update_layout(height=600, yaxis={"categoryorder": "total ascending"})
+        fig.update_layout(height=600)
         st.plotly_chart(fig, use_container_width=True)
+        st.caption(
+            "Renk = tutuklama oranı (yüksek=daha çok yakalama). "
+            "Çubuk uzunluğu = toplam suç sayısı."
+        )
     else:
-        st.info("Henüz gold tablosu yok — `gold_features.py` çalıştırılmalı.")
+        st.info("Henüz gold/type_stats yok — `gold_features.py` çalıştırılmalı.")
 
-    st.subheader("Aktivite kovaları (kullanıcılar)")
-    users = read_delta(str(GOLD_USER_PATH))
-    if users is not None and not users.empty:
-        bucket_counts = users["activity_bucket"].value_counts().reset_index()
-        bucket_counts.columns = ["bucket", "users"]
-        st.plotly_chart(px.pie(bucket_counts, names="bucket", values="users",
-                               hole=0.4),
-                        use_container_width=True)
+    st.subheader("Tutuklama oranı dağılımı (frekansa göre)")
+    if types is not None and not types.empty:
+        fig2 = px.scatter(
+            types,
+            x="crime_count", y="arrest_rate",
+            size="crime_count", color="frequency_bucket",
+            hover_name="primary_type",
+            log_x=True,
+        )
+        st.plotly_chart(fig2, use_container_width=True)
+        st.caption(
+            "X ekseni log ölçek. Yüksek frekanslı suç tiplerinde tutuklama oranı "
+            "genellikle daha düşük (örn. theft) — düşük frekanslı bazıları daha yüksek arrest_rate'e sahip olabilir."
+        )
 
 
-with tab_recs:
-    st.subheader("Kullanıcıya özel top-N öneri")
-    recs = read_delta(str(RECS_PATH))
-    if recs is None or recs.empty:
-        st.info("Henüz öneri tablosu yok — `inference.py` çalıştırılmalı.")
-    else:
-        users_avail = sorted(recs["userId"].unique())[:200]
-        chosen = st.selectbox("userId seç", users_avail)
-        sub = (recs[recs["userId"] == chosen]
-                  .sort_values("rank")
-                  .head(20))
-        st.dataframe(
-            sub[["rank", "title", "genres", "predicted_rating",
-                 "avg_rating", "rating_count"]],
+with tab_district:
+    st.subheader("İlçe bazında suç sayısı + en sık suç tipi")
+    districts = read_delta(str(GOLD_DISTRICT_PATH))
+    if districts is not None and not districts.empty:
+        fig = px.bar(
+            districts.sort_values("crime_count"),
+            x="crime_count", y=districts["district"].astype(str),
+            orientation="h",
+            color="top_primary_type",
+            hover_data=["unique_types", "arrest_rate", "size_bucket"],
+            title="İlçe başına toplam (top suç tipi renkle)",
+        )
+        fig.update_layout(height=600, yaxis_title="district")
+        st.plotly_chart(fig, use_container_width=True)
+
+        st.subheader("İlçe haritası (avg lat/lon)")
+        st.plotly_chart(
+            px.scatter_mapbox(
+                districts.dropna(subset=["avg_latitude", "avg_longitude"]),
+                lat="avg_latitude", lon="avg_longitude",
+                size="crime_count", color="arrest_rate",
+                hover_name="district",
+                hover_data=["top_primary_type", "unique_types"],
+                zoom=9, height=500,
+                mapbox_style="open-street-map",
+                color_continuous_scale="RdYlGn_r",
+            ),
             use_container_width=True,
-            hide_index=True,
+        )
+        st.caption(
+            "Daire büyüklüğü = suç sayısı, renk = tutuklama oranı (kırmızı=düşük). "
+            "Konum = ilçe ortalama lat/lon."
+        )
+    else:
+        st.info("Henüz gold/district_stats yok.")
+
+
+with tab_hourly:
+    st.subheader("Saat × Suç tipi heatmap")
+    hourly = read_delta(str(GOLD_HOURLY_PATH))
+    if hourly is not None and not hourly.empty:
+        top_types = (
+            hourly.groupby("primary_type")["crime_count"].sum()
+            .nlargest(10).index.tolist()
+        )
+        sub = hourly[hourly["primary_type"].isin(top_types)]
+        pivot = sub.pivot_table(
+            index="primary_type", columns="hour_of_day",
+            values="crime_count", fill_value=0,
+        )
+        st.plotly_chart(
+            px.imshow(
+                pivot.reindex(top_types),
+                labels=dict(x="hour_of_day", y="primary_type", color="count"),
+                aspect="auto",
+                color_continuous_scale="Viridis",
+            ),
+            use_container_width=True,
+        )
+        st.caption(
+            "Top 10 suç tipi × günün saati. Theft genellikle öğleden sonra zirve "
+            "yapar, battery ise gece yarısı civarı."
+        )
+
+        st.subheader("Saatlik toplam suç sayısı")
+        hourly_total = (
+            hourly.groupby("hour_of_day")["crime_count"].sum().reset_index()
+        )
+        st.plotly_chart(
+            px.line(hourly_total, x="hour_of_day", y="crime_count", markers=True),
+            use_container_width=True,
+        )
+    else:
+        st.info("Henüz gold/hourly_stats yok.")
+
+
+with tab_preds:
+    st.subheader("Random Forest tahminleri")
+    preds = read_delta(str(PREDICTIONS_PATH))
+    if preds is None or preds.empty:
+        st.info("Henüz tahmin yok — `inference.py` çalıştırılmalı.")
+    else:
+        sample = preds.head(1000)
+        match = (sample["actual_primary_type"] == sample["predicted_label"]).mean()
+        st.metric("Örnek (1K satır) doğruluk", f"{match:.1%}")
+
+        col_a, col_b = st.columns(2)
+        with col_a:
+            actual_top = sample["actual_primary_type"].value_counts().head(10)
+            st.markdown("**Gerçek dağılım (top 10)**")
+            st.bar_chart(actual_top)
+        with col_b:
+            pred_top = sample["predicted_label"].value_counts().head(10)
+            st.markdown("**Tahmin dağılımı (top 10)**")
+            st.bar_chart(pred_top)
+
+        st.subheader("Karışıklık matrisi (örnek)")
+        cm = pd.crosstab(
+            sample["actual_primary_type"],
+            sample["predicted_label"],
+        )
+        st.plotly_chart(
+            px.imshow(
+                cm.values,
+                x=list(cm.columns), y=list(cm.index),
+                color_continuous_scale="Blues",
+                labels=dict(x="tahmin", y="gerçek"),
+                aspect="auto",
+            ),
+            use_container_width=True,
         )
 
 
@@ -104,7 +255,7 @@ with tab_mlflow:
         mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
         client = mlflow.tracking.MlflowClient()
         exp = client.get_experiment_by_name(
-            os.environ.get("MLFLOW_EXPERIMENT", "movielens-als")
+            os.environ.get("MLFLOW_EXPERIMENT", "chicago-crimes-classifier")
         )
         if exp is None:
             st.info("Henüz deney yok.")
@@ -112,32 +263,78 @@ with tab_mlflow:
             runs = client.search_runs(
                 exp.experiment_id,
                 order_by=["attributes.start_time DESC"],
-                max_results=20,
+                max_results=50,
             )
             rows = []
             for r in runs:
                 rows.append({
                     "run_id": r.info.run_id[:8],
-                    "rmse": r.data.metrics.get("rmse"),
-                    "mae": r.data.metrics.get("mae"),
-                    "rank": r.data.params.get("rank"),
-                    "regParam": r.data.params.get("regParam"),
-                    "maxIter": r.data.params.get("maxIter"),
-                    "n_ratings": r.data.params.get("n_ratings"),
+                    "run_name": r.data.tags.get("mlflow.runName", ""),
+                    "numTrees": int(r.data.params.get("numTrees", 0) or 0) or None,
+                    "maxDepth": int(r.data.params.get("maxDepth", 0) or 0) or None,
+                    "accuracy": r.data.metrics.get("accuracy"),
+                    "weighted_f1": r.data.metrics.get("weighted_f1"),
+                    "weighted_precision": r.data.metrics.get("weighted_precision"),
+                    "weighted_recall": r.data.metrics.get("weighted_recall"),
                     "train_seconds": r.data.metrics.get("train_seconds"),
+                    "n_rows": int(r.data.params.get("n_rows", 0) or 0) or None,
                 })
-            df = pd.DataFrame(rows)
-            st.dataframe(df, use_container_width=True, hide_index=True)
-            if not df.empty and df["rmse"].notna().any():
-                st.plotly_chart(
-                    px.scatter(df.dropna(subset=["rmse"]),
-                               x="rank", y="rmse",
-                               size="n_ratings", color="regParam",
-                               hover_data=["run_id"]),
-                    use_container_width=True,
-                )
+            df = pd.DataFrame(rows).dropna(subset=["accuracy"])
+            if df.empty:
+                st.info("Henüz tamamlanmış run yok.")
+            else:
+                st.dataframe(df, use_container_width=True, hide_index=True)
+
+                tree_sweep = df[df["maxDepth"] == df["maxDepth"].mode().iloc[0]].sort_values("numTrees")
+                if len(tree_sweep) >= 2:
+                    col_a, col_b = st.columns(2)
+                    with col_a:
+                        st.markdown("**Accuracy ile numTrees**")
+                        st.plotly_chart(
+                            px.line(tree_sweep, x="numTrees", y="accuracy", markers=True),
+                            use_container_width=True,
+                        )
+                    with col_b:
+                        st.markdown("**Eğitim süresi (s) ile numTrees**")
+                        st.plotly_chart(
+                            px.line(tree_sweep, x="numTrees", y="train_seconds", markers=True),
+                            use_container_width=True,
+                        )
+
+                depth_sweep = df[df["numTrees"] == df["numTrees"].mode().iloc[0]].sort_values("maxDepth")
+                if len(depth_sweep) >= 2:
+                    col_c, col_d = st.columns(2)
+                    with col_c:
+                        st.markdown("**Accuracy ile maxDepth**")
+                        st.plotly_chart(
+                            px.line(depth_sweep, x="maxDepth", y="accuracy", markers=True),
+                            use_container_width=True,
+                        )
+                    with col_d:
+                        st.markdown("**Weighted F1 ile maxDepth**")
+                        st.plotly_chart(
+                            px.line(depth_sweep, x="maxDepth", y="weighted_f1", markers=True),
+                            use_container_width=True,
+                        )
+
+                st.markdown("**Pareto: doğruluk vs eğitim süresi**")
+                pareto = df.dropna(subset=["accuracy", "train_seconds"])
+                if not pareto.empty:
+                    st.plotly_chart(
+                        px.scatter(
+                            pareto,
+                            x="train_seconds", y="accuracy",
+                            size="numTrees", color="maxDepth",
+                            hover_data=["run_name"],
+                            text="run_name",
+                        ),
+                        use_container_width=True,
+                    )
     except Exception as exc:
         st.error(f"MLflow erişilemiyor: {exc}")
 
 st.divider()
-st.caption("bigdataKOU/bigdataproje · Spark 3.5 · Delta 3.2 · MLflow 2.16")
+st.caption(
+    "bigdataKOU/bigdataproje · Chicago Crimes 2001-Present · "
+    "Spark 3.5 · Delta 3.2 · MLflow 2.16 · RandomForest"
+)
