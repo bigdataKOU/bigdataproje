@@ -25,14 +25,17 @@ fi
 echo
 yellow "2) python py_compile"
 PY_FILES=(
-    producer/ratings_producer.py
+    producer/crime_producer.py
     spark/jobs/_session.py
     spark/jobs/bronze_ingest.py
     spark/jobs/silver_clean.py
     spark/jobs/gold_features.py
-    spark/ml/train_als.py
+    spark/ml/train_models.py
     spark/ml/inference.py
+    spark/notebooks/01_eda.py
+    spark/notebooks/02_feature_engineering.py
     dashboard/app.py
+    scripts/make_charts.py
 )
 if python3 -m py_compile "${PY_FILES[@]}" 2>&1; then
     green "   ok (${#PY_FILES[@]} dosya)"
@@ -51,29 +54,27 @@ for s in spark/run.sh scripts/run_all.sh scripts/verify.sh; do
     fi
 done
 
-# 4. dockerfile yapisi (opsiyonel - hadolint varsa)
+# 4. dockerfile yapisi
 echo
-yellow "4) dockerfile parse (basit kontrol)"
+yellow "4) dockerfile parse"
 for d in producer/Dockerfile spark/Dockerfile dashboard/Dockerfile mlflow/Dockerfile; do
     if [[ -f "$d" ]] && grep -qE "^FROM " "$d"; then
         green "   ok: $d"
     else
-        red "   FAIL: $d FROM yok ya da dosya yok"; ok=false
+        red "   FAIL: $d"; ok=false
     fi
 done
 
-# 5. veriseti dosyalari mevcut mu
+# 5. veriseti
 echo
-yellow "5) MovieLens dataset"
-ML_DIR="${ML25M_DIR:-../ml-25m}"
-for f in ratings.csv movies.csv tags.csv links.csv; do
-    if [[ -f "${ML_DIR}/${f}" ]]; then
-        size=$(du -h "${ML_DIR}/${f}" | cut -f1)
-        green "   ok: ${f} (${size})"
-    else
-        red "   FAIL: ${ML_DIR}/${f} bulunamadi"; ok=false
-    fi
-done
+yellow "5) Chicago Crimes dataset"
+CR_DIR="${CRIMES_DIR:-../crimes}"
+if [[ -f "${CR_DIR}/Crimes.csv" ]]; then
+    size=$(du -h "${CR_DIR}/Crimes.csv" | cut -f1)
+    green "   ok: Crimes.csv (${size})"
+else
+    red "   FAIL: ${CR_DIR}/Crimes.csv bulunamadi"; ok=false
+fi
 
 # 6. requirements.txt'ler
 echo
@@ -82,7 +83,7 @@ for r in producer/requirements.txt dashboard/requirements.txt; do
     if [[ -f "$r" ]] && grep -qE "==" "$r"; then
         green "   ok: $r ($(wc -l < "$r") paket)"
     else
-        red "   FAIL: $r (versiyon pin yok)"; ok=false
+        red "   FAIL: $r"; ok=false
     fi
 done
 
