@@ -63,10 +63,10 @@ done_ "producer bitti"
 # 4) Bronze flush
 log "4/11 bronze ilk commit'i bekleniyor (max ${INGEST_WAIT_SECONDS}s)"
 deadline=$(( $(date +%s) + INGEST_WAIT_SECONDS ))
-while (( $(date +%s) < deadline )); do
-    c=$(${DC} exec -T pipeline ls -1 /opt/delta/bronze/crimes/_delta_log/ \
-            2>/dev/null | grep -c "json" || echo 0)
-    if (( c >= 3 )); then
+while [[ $(date +%s) -lt $deadline ]]; do
+    c=$( (${DC} exec -T pipeline sh -c 'ls -1 /opt/delta/bronze/crimes/_delta_log/ 2>/dev/null | grep -c json') 2>/dev/null | head -1 )
+    c=${c:-0}
+    if [[ "$c" -ge 3 ]] 2>/dev/null; then
         done_ "bronze ${c} commit yazdı"
         break
     fi
