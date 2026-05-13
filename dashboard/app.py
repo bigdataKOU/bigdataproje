@@ -105,8 +105,48 @@ if best:
     )
 
 
-tab_overview, tab_district, tab_hourly, tab_preds, tab_mlflow = st.tabs(
-    ["📊 Genel", "🗺️ İlçe", "🕒 Saat", "🔮 Tahminler", "🧪 MLflow"]
+# Sidebar: filtreler + pipeline sağlık
+with st.sidebar:
+    st.markdown("### 🔧 Pipeline Sağlık")
+    try:
+        from datetime import datetime
+        bronze_dt = DeltaTable(str(BRONZE_PATH))
+        bronze_hist = bronze_dt.history(1)
+        bronze_ts = (
+            bronze_hist[0].get("timestamp", 0) // 1000
+            if bronze_hist else 0
+        )
+        st.caption(
+            f"Bronze son commit: {datetime.fromtimestamp(bronze_ts).strftime('%Y-%m-%d %H:%M')}"
+            if bronze_ts else "Bronze: —"
+        )
+    except Exception:
+        st.caption("Bronze: erişilemiyor")
+    try:
+        silver_dt = DeltaTable(str(SILVER_PATH))
+        silver_hist = silver_dt.history(1)
+        silver_ts = (
+            silver_hist[0].get("timestamp", 0) // 1000
+            if silver_hist else 0
+        )
+        st.caption(
+            f"Silver son commit: {datetime.fromtimestamp(silver_ts).strftime('%Y-%m-%d %H:%M')}"
+            if silver_ts else "Silver: —"
+        )
+    except Exception:
+        st.caption("Silver: erişilemiyor")
+
+    st.divider()
+    st.markdown("### 🔗 Hızlı Linkler")
+    st.markdown(
+        "- [MLflow UI](http://localhost:5000)\n"
+        "- [Spark UI](http://localhost:8080)\n"
+        "- [GitHub repo](https://github.com/bigdataKOU/bigdataproje)\n"
+        "- [HTML Rapor](docs/rapor.html)"
+    )
+
+tab_overview, tab_district, tab_hourly, tab_models, tab_preds, tab_mlflow = st.tabs(
+    ["📊 Genel", "🗺️ İlçe", "🕒 Saat", "🤖 Modeller", "🔮 Tahminler", "🧪 MLflow"]
 )
 
 with tab_overview:
@@ -221,6 +261,112 @@ with tab_hourly:
         )
     else:
         st.info("Henüz gold/hourly_stats yok.")
+
+
+with tab_models:
+    st.subheader("Her model için detaylı görünüm")
+    try:
+        mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+        client = mlflow.tracking.MlflowClient()
+        exp = client.get_experiment_by_name(
+            os.environ.get("MLFLOW_EXPERIMENT", "chicago-crimes-classifier")
+        )
+        if exp is None:
+            st.info("Henüz deney yok.")
+        else:
+            all_runs = client.search_runs(exp.experiment_id, max_results=50)
+            # En yüksek accuracy ile model_type başına bir tane tut
+            best_per_model = {}
+            for r in all_runs:
+                mt = r.data.params.get("model_type")
+                acc = r.data.metrics.get("accuracy")
+                if mt is None or acc is None:
+                    continue
+                if mt not in best_per_model or acc > best_per_model[mt].data.metrics.get("accuracy", 0):
+                    best_per_model[mt] = r
+
+            if not best_per_model:
+                st.info("Henüz tamamlanmış model yok.")
+            else:
+                model_list = list(best_per_model.keys())
+                # Best modeli en başa koy
+                model_list.sort(
+                    key=lambda m: -best_per_model[m].data.metrics.get("accuracy", 0)
+                )
+                chosen_model = st.selectbox(
+                    "Model seç",
+                    model_list,
+                    format_func=lambda m: f"{m} (acc={best_per_model[m].data.metrics.get('accuracy', 0):.4f})",
+                )
+                r = best_per_model[chosen_model]
+
+                # Metrikler özet
+                col_a, col_b, col_c, col_d = st.columns(4)
+                col_a.metric("Accuracy", f"{r.data.metrics.get('accuracy', 0):.4f}")
+                col_b.metric("Weighted F1", f"{r.data.metrics.get('weighted_f1', 0):.4f}")
+                auc = r.data.metrics.get('auc_ovr_macro')
+                col_c.metric("AUC (OvR)", f"{auc:.4f}" if auc else "—")
+                col_d.metric("Train süresi", f"{r.data.metrics.get('train_seconds', 0):.1f}s")
+
+                # Feature Importance + Confusion Matrix + per-class yan yana
+                import tempfile
+                tmp = tempfile.mkdtemp(prefix="mlflow_dl_")
+
+                col_fi, col_cm = st.columns(2)
+                with col_fi:
+                    st.markdown("**Feature Importance**")
+                    try:
+                        fi_path = client.download_artifacts(
+                            r.info.run_id, f"feature_importance_{chosen_model}.csv",
+                            dst_path=tmp,
+                        )
+                        fi = pd.read_csv(fi_path).sort_values("importance")
+                        st.plotly_chart(
+                            px.bar(fi, x="importance", y="feature",
+                                   orientation="h",
+                                   color="importance",
+                                   color_continuous_scale="Blues"),
+                            use_container_width=True,
+                        )
+                    except Exception:
+                        st.caption("Feature importance bu model için yok.")
+
+                with col_cm:
+                    st.markdown("**Confusion Matrix**")
+                    try:
+                        cm_path = client.download_artifacts(
+                            r.info.run_id, f"cm_{chosen_model}.csv",
+                            dst_path=tmp,
+                        )
+                        cm = pd.read_csv(cm_path, index_col=0)
+                        st.plotly_chart(
+                            px.imshow(cm.values,
+                                      x=list(cm.columns),
+                                      y=list(cm.index),
+                                      color_continuous_scale="Blues",
+                                      labels=dict(x="tahmin", y="gerçek"),
+                                      text_auto=True),
+                            use_container_width=True,
+                        )
+                    except Exception:
+                        st.caption("Confusion matrix bu model için yok.")
+
+                # Per-class metrikler tablo
+                st.markdown("**Sınıf başına precision / recall / F1**")
+                try:
+                    pc_path = client.download_artifacts(
+                        r.info.run_id, f"per_class_{chosen_model}.csv",
+                        dst_path=tmp,
+                    )
+                    pc = pd.read_csv(pc_path)
+                    for c in ["precision", "recall", "f1"]:
+                        if c in pc.columns:
+                            pc[c] = pc[c].apply(lambda v: f"{v:.4f}")
+                    st.dataframe(pc, use_container_width=True, hide_index=True)
+                except Exception:
+                    st.caption("Per-class metrik artifact'i bu model için yok.")
+    except Exception as exc:
+        st.error(f"MLflow erişilemiyor: {exc}")
 
 
 with tab_preds:
