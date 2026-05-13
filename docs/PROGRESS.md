@@ -1,121 +1,122 @@
-# PROGRESS — Adım adım yaptıklarımız
+# PROGRESS — Adım adım yapılanlar
 
-Bu dosya sırasıyla hangi dosyada ne yaptığımızı tutuyor; sunum ve takım arkadaşlarına anlatım için.
+Bu dosya sırayla hangi dosyada ne yapıldığını tutuyor; sunum ve takım arkadaşlarına anlatım için.
 
 ## 1. Repo iskeleti
-- `.gitignore` — data, delta-store, mlruns, checkpoints, __pycache__ ignore.
-- `.env.example` — KAFKA_BROKER, MLFLOW_TRACKING_URI, ALS hyperparam vs. örnekleri.
-- `data/`, `delta-store/`, `mlruns/`, `notebooks/`, `docs/` boş klasörleri.
-- Eski `readme.md` silindi (yerine kapsamlı `README.md`).
+- `.gitignore` — data, delta-store, mlruns, checkpoints, __pycache__, log dosyaları ignore.
+- `.env.example` — `KAFKA_TOPIC_CRIMES`, `MLFLOW_EXPERIMENT`, `CRIMES_DIR`, producer modları örnekleri.
+- `data/`, `notebooks/`, `docs/` klasörleri.
 
 ## 2. Docker Compose mimarisi
-- `docker-compose.yml` — 7 servis: kafka (KRaft, no zookeeper), spark-master, spark-worker, mlflow, producer, pipeline, dashboard.
-- Volume bind mount'ları: `./spark`, `./delta-store`, `./checkpoints`, `./mlruns` ve dataset (`../ml-25m`).
-- YAML anchor: `x-spark-env`, `x-spark-volumes` ile DRY.
+- `docker-compose.yml` — 7 servis: `kafka` (KRaft, no zookeeper), `spark-master`, `spark-worker` (8 core/6GB), `mlflow`, `producer`, `pipeline`, `dashboard`.
+- Volume bind mount'ları: `./spark`, named volume `delta-data`/`checkpoints-data`/`mlruns-data`/`ivy-cache`, dataset `${CRIMES_DIR:-../crimes}:/opt/data/crimes:ro`.
+- YAML anchor: `x-spark-volumes` ile DRY.
 
 ## 3. MLflow tracking server
 - `mlflow/Dockerfile` — python:3.11-slim + mlflow 2.16.2 + boto3 + psycopg2.
-- Backend: SQLite (`/opt/mlflow-store/mlflow.db`), artifact root: `/opt/mlruns`.
-- Port 5000.
+- Backend: SQLite, artifact root: `/opt/mlruns`.
 
-## 4. Kafka producer
-- `producer/Dockerfile` — confluent-kafka image.
-- `producer/ratings_producer.py`:
-  - ratings.csv'i satır satır okur, JSON olarak Kafka'ya basar.
-  - `PRODUCER_SPEEDUP` faktörüyle timestamp aralarını sıkıştırır (gerçek zamanlı simülasyon).
-  - `PRODUCER_MAX_RECORDS` ile durdurma sınırı.
-  - SIGINT/SIGTERM ile clean shutdown.
+## 4. Kafka producer (Adım 2)
+- `producer/crime_producer.py`:
+  - `Crimes.csv`'i satır satır okur, JSON olarak Kafka'ya basar.
+  - `Date` alanını epoch ms'ye parse, boolean/int/float dönüşümleri.
+  - `id` veya `Primary Type` null ise satır atlanır.
+  - 3 mod: `fixed`/`speedup`/`burst`. SIGINT/SIGTERM temiz kapanış.
 
 ## 5. Spark image
 - `spark/Dockerfile` — apache/spark:3.5.8-python3 + delta-spark 3.2 + spark-sql-kafka 3.5.1 + mlflow-spark 2.16.
-- JAR'lar build sırasında ivy ile pre-resolve ediliyor → spark-submit hızlı.
-- `spark/run.sh` — spark-submit wrapper, packages + delta config'leri.
+- `spark/run.sh` — spark-submit wrapper; env'den `SPARK_DRIVER_MEMORY`/`SPARK_EXECUTOR_MEMORY` override.
 
-## 6. Bronze layer
-- `spark/jobs/_session.py` — ortak SparkSession factory + path sabitleri.
+## 6. Bronze layer (Adım 3)
+- `spark/jobs/_session.py` — ortak SparkSession factory + path helper.
 - `spark/jobs/bronze_ingest.py`:
-  - Kafka 'ratings' topic'ten structured streaming read.
-  - JSON parse (RATING_SCHEMA: userId, movieId, rating, timestamp, ingestedAt).
-  - Kafka metadata (topic, partition, offset, timestamp) korunur.
+  - Kafka `crimes` topic'ten structured streaming read.
+  - JSON parse `CRIME_SCHEMA` (17 alan).
   - Delta'ya append, `event_date` partition.
-  - Checkpoint: `/opt/checkpoints/bronze`.
+  - `maxOffsetsPerTrigger=200000` (kritik fix: sınırsız batch'te commit takılıyor).
 
-## 7. Silver layer
+## 7. Silver layer (Adım 3)
 - `spark/jobs/silver_clean.py`:
-  - Bronze'dan streaming read.
-  - `foreachBatch` içinde:
-    - rating ∈ [0.5, 5.0] filter, null kontrol.
-    - `(userId, movieId, timestamp)` ile dedup.
-    - movies.csv broadcast join (title, genres, genre_list).
-    - Delta MERGE upsert (idempotent).
-  - Checkpoint: `/opt/checkpoints/silver`.
+  - Bronze'dan streaming/batch read (`SILVER_BATCH_ONCE`).
+  - Null filtre + `dropDuplicates(["id"])`.
+  - Türetilmiş: `hour_of_day`, `day_of_week`, `month`, `event_year`.
+  - `partitionBy(event_year)` (28 dizin — `event_date` fan-out yapardı).
+  - Streaming sinkinde `foreachBatch` + Delta MERGE upsert.
 
-## 8. Gold layer
+## 8. Optimize silver
+- `spark/jobs/optimize_silver.py`:
+  - `DeltaTable.optimize().executeCompaction()`.
+  - ML read fazını hızlandırır (binlerce küçük parquet → ~1GB hedef boyut).
+
+## 9. Gold layer (Adım 3)
 - `spark/jobs/gold_features.py`:
-  - Silver'dan batch read.
-  - `gold/movie_stats`: count, avg, std, popularity_bucket (high/medium/low).
-  - `gold/user_stats`: count, active_days, unique_movies, activity_bucket (power/active/casual).
+  - `gold/type_stats`: primary_type başına count, arrest_rate, domestic_rate, frequency_bucket.
+  - `gold/district_stats`: district başına count, en sık primary_type (window function), avg lat/lon, size_bucket.
+  - `gold/hourly_stats`: hour × primary_type heatmap için.
 
-## 9. ML training
-- `spark/ml/train_als.py`:
-  - Silver'dan (userId, movieId, rating) çek, opsiyonel sample.
-  - 80/20 train/test split.
-  - ALS(rank, regParam, maxIter) — coldStart="drop", nonnegative=True.
-  - MLflow:
-    - Params: rank, regParam, maxIter, train_ratio, sample_fraction, n_ratings.
-    - Metrics: rmse, mae, train_seconds.
-    - Model: `mlflow.spark.log_model` + registry'ye `movielens-als-recommender` adıyla.
-    - Artifact: 20 örnek user için top-K öneri CSV'si.
+## 10. EDA (Adım 4)
+- `spark/notebooks/01_eda.py`:
+  - Temel istatistikler, eksik değer analizi, top-15 dağılım.
+  - Yıllık/saatlik/haftalık trendler.
+  - Sayısal `describe`.
+  - `gold/eda_overview` Delta + JSON özet (chart üretimi için).
 
-## 10. Inference
+## 11. Feature Engineering (Adım 5)
+- `spark/notebooks/02_feature_engineering.py`:
+  - 13 özellik (PDF kuralı en az 5):
+    - Zaman: `hour_of_day`, `day_of_week`, `month`, `event_year`
+    - Konum: `district`, `ward`, `community_area`, `beat`
+    - Koordinat: `latitude`, `longitude`
+    - Bağlam: `arrest_int`, `domestic_int`
+    - Türetilmiş bool: `is_weekend`, `is_night`
+  - `gold/feature_view` Delta — ML-hazır snapshot.
+
+## 12. ML Training — 5 model (Adım 6)
+- `spark/ml/train_models.py`:
+  - Silver'dan örnek (`SAMPLE_FRACTION`).
+  - Top-N `primary_type` + OTHER (sınıf dengesi).
+  - StringIndexer → VectorAssembler → her klasifier ayrı pipeline.
+  - **5 model sırayla:**
+    1. `LogisticRegression(multinomial, maxIter=20)`
+    2. `DecisionTreeClassifier(maxDepth=10, maxBins=64)`
+    3. `RandomForestClassifier(numTrees=50, maxDepth=10)`
+    4. `OneVsRest(GBTClassifier(maxIter=20, maxDepth=5))`
+    5. `NaiveBayes(multinomial)`
+  - **Her run için MLflow logla:**
+    - Params + Metrics (accuracy, weighted_f1/p/r, auc_ovr_macro, train_seconds).
+    - **Feature Importance** (RF/DT: `featureImportances`, LR: `|coef|.mean()`, OvR: alt-modeller ortalaması) — CSV artifact + per-feature MLflow metric.
+    - **Confusion Matrix** CSV artifact.
+    - **Per-class precision/recall/F1** CSV artifact.
+    - Model + registry (`chicago-crime-<name>`).
+  - Tek modelin çökmesi diğerlerini durdurmaz.
+
+## 13. Inference
 - `spark/ml/inference.py`:
-  - Registry'den en son model versiyonunu yükle (stage opsiyonel).
-  - `recommendForAllUsers(TOP_K)` → flatten + rank.
-  - `gold/movie_stats` ile join (title, genres, popüllüğü).
-  - `gold/user_recommendations` Delta tablosuna yaz.
+  - MLflow'da en yüksek `accuracy`'ye sahip modeli bul.
+  - `runs:/{run_id}/{model_type}_model` URI ile yükle.
+  - Silver'dan örnek üzerinde tahmin, `gold/predictions` Delta'ya yaz.
 
-## 11. Streamlit dashboard
-- `dashboard/Dockerfile` — streamlit 1.39 + deltalake (Spark gerektirmez!) + plotly.
+## 14. Streamlit dashboard (Adım 7)
 - `dashboard/app.py`:
-  - 4 metrik kartı: bronze/silver/movie/user satır sayıları.
-  - Tab "Genel": top 20 film bar chart (rating count'a göre), aktivite kovaları pie.
-  - Tab "Öneriler": userId selectbox → top-20 film tablosu.
-  - Tab "MLflow": run karşılaştırma tablosu + RMSE vs rank scatter.
+  - 4 metrik kartı + en iyi model banner'ı.
+  - **5 sekme:** Genel, İlçe (Mapbox harita), Saat (heatmap), Tahminler (confusion matrix), MLflow (5 model karşılaştırma + Pareto).
 
-## 12. Yardımcılar
-- `Makefile` — `make build/up/bronze/silver/gold/train/inference/dashboard/clean`.
-- `notebooks/01_eda.ipynb` — keşifsel veri analizi (rating dist, yıl trend, top filmler).
-- `docs/architecture.md` — teknik tasarım gerekçeleri.
-- `README.md` — mimari ASCII, takım, kurulum, çalıştırma adımları.
+## 15. Charts (Adım 7 zorunlu görseller)
+- `scripts/make_charts.py`:
+  - MLflow runs + EDA summary JSON'ı oku.
+  - 9 PNG: 5 model grouped bar, feature importance hbar, confusion matrix heatmap, ROC curve proxy, yıllık/saatlik line, top-15 histogram, pie chart, district bar.
 
-## 13. Test edilen
-- `docker compose config --quiet` ✅ (compose syntax)
-- Tüm Python dosyaları `py_compile` ✅
-- Kafka KRaft ayağa kalktı, healthy ✅
-- Spark master + worker registered (2 core, 4GB) ✅
-- MLflow tracking server gunicorn dinliyor (5000) ✅
-- Producer Kafka'ya 1730 mesaj bastı, topic offset doğrulandı ✅
+## 16. Yardımcılar
+- `Makefile` — `make build/up/bronze/silver/gold/eda/train/inference/charts/dashboard/clean`.
+- `scripts/run_all.sh` — 11 aşamalı tek-komut.
+- `scripts/verify.sh` — compose config + py_compile + bash -n + dockerfile + dataset + requirements.
 
-## 14. Yapılmadı (disk dolduğu için durdurduk)
-- Pipeline image build (~4 GB Maven cache); Dockerhub'a push düşünülebilir.
-- Bronze ingest job canlı çalıştırma.
-- Silver/Gold job'larının end-to-end testi.
-- ALS train + MLflow run kaydı.
-- Inference + dashboard demo.
-- Bunların hepsi yazılmış ve çalışmaya hazır kod.
+## 17. Branch geçmişi
+- `main` → `feat/pipeline-bootstrap` → `feat/hyperparam-sweep` (MovieLens son hali) → `feat/chicago-crimes` (mevcut, tam rewrite).
+- Veri seti pivot (MovieLens → Chicago Crimes): proje sonunda form bilgilerine uyum sağlamak için tam yeniden yazım.
 
-## Sıradaki adımlar (disk açıldıktan sonra)
-1. `make verify` (sentaks kontrolü, disk yormaz).
-2. `make run-all` — tek komut uçtan-uca pipeline.
-3. Sonuçlar: dashboard:8501, mlflow:5000, sparkUI:8080.
-
-## 15. İkinci tur iyileştirmeleri (commit 2)
-- `spark/Dockerfile` — Maven JAR pre-resolve adımı kaldırıldı (4 GB → 1.2 GB).
-- `docker-compose.yml` — `ivy-cache` named volume eklendi; JAR'lar runtime'da cache'leniyor.
-- `producer/ratings_producer.py` — `PRODUCER_MODE`: `fixed` (varsayılan, 1000 msg/s sabit) / `speedup` (timestamp tabanlı) / `burst` (sleep yok). Eski speedup-only modu çok yavaştı.
-- `spark/jobs/silver_clean.py` — `cleaned.persist()` + `try/finally unpersist`; merge ile count aynı plan üzerinden çalışsın.
-- `spark/ml/inference.py` — eksik `import mlflow.spark` eklendi.
-- `dashboard/app.py` — gereksiz `TableNotFoundError` import temizliği, `pd.DataFrame | None` type-hint kaldırıldı (3.10 öncesi uyumluluk).
-- `scripts/run_all.sh` — bronze/silver arka planda, producer foreground, gold→train→inference sırasıyla.
-- `scripts/verify.sh` — compose config + py_compile + bash -n + dockerfile parse + dataset kontrolü + requirements pin kontrolü.
-- `Makefile` — `make verify`, `make run-all` hedefleri.
+## 18. Test edilen
+- `make verify` ✅
+- Kafka healthy, Spark master+worker registered (8 core), MLflow up
+- Producer 2M kayıt → Kafka (~15K/s burst mode)
+- (Pipeline çalışırken bu bölüm sonuçlarla güncellenir)
