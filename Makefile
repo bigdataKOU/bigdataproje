@@ -18,6 +18,8 @@ help:
 	@echo "  make train       - 5 ML modelini sirayla egit (LogReg/DT/RF/GBT/NB) + MLflow"
 	@echo "  make inference   - En iyi modelle silver uzerinde tahmin"
 	@echo "  make charts      - docs/figures/ icin PNG grafikleri uret"
+	@echo "  make report      - docs/rapor.html HTML teknik raporu uret"
+	@echo "  make presentation- docs/sunum.html reveal.js slideshow uret"
 	@echo "  make dashboard   - Streamlit dashboard"
 	@echo "  make logs S=svc  - Servis loglari"
 	@echo "  make ps          - Servis durumu"
@@ -75,6 +77,13 @@ report:
 	docker compose exec -T -e MLFLOW_TRACKING_URI=http://mlflow:5000 -e REPORT_OUT=/app/rapor.html dashboard python /app/make_report.py
 	cp dashboard/rapor.html docs/rapor.html
 	@echo "HTML rapor: docs/rapor.html"
+
+presentation:
+	@cp scripts/make_presentation.py dashboard/make_presentation.py
+	@docker cp $$(docker compose ps -q pipeline):/opt/app/notebooks/eda_summary.json dashboard/eda_summary.json 2>/dev/null || true
+	docker compose exec -T -e MLFLOW_TRACKING_URI=http://mlflow:5000 -e PRESENTATION_OUT=/app/sunum.html dashboard python /app/make_presentation.py
+	cp dashboard/sunum.html docs/sunum.html
+	@echo "Slideshow: docs/sunum.html (tarayıcıda aç)"
 
 dashboard:
 	docker compose up -d dashboard

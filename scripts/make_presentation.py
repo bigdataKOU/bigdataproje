@@ -1,0 +1,588 @@
+"""
+docs/sunum.html — reveal.js ile interaktif slideshow.
+
+MLflow + EDA özetinden canlı veri çeker; 12+ slayt üretir.
+Browser'da açılır, klavye okları ile gezinilir, "S" tuşu speaker notes açar.
+
+Kullanım:
+  docker compose exec dashboard python /app/make_presentation.py
+veya:
+  make presentation
+"""
+from __future__ import annotations
+
+import json
+import os
+from datetime import datetime
+from pathlib import Path
+
+import mlflow
+import pandas as pd
+
+TRACKING_URI = os.environ.get("MLFLOW_TRACKING_URI", "http://mlflow:5000")
+EXPERIMENT = os.environ.get("MLFLOW_EXPERIMENT", "chicago-crimes-classifier")
+OUT_HTML = Path(os.environ.get("PRESENTATION_OUT", "/app/sunum.html"))
+EDA_CANDIDATES = [
+    "/opt/app/notebooks/eda_summary.json",
+    "/app/eda_summary.json",
+    "spark/notebooks/eda_summary.json",
+]
+
+
+def load_eda() -> dict:
+    for p in EDA_CANDIDATES:
+        if os.path.exists(p):
+            return json.load(open(p))
+    return {}
+
+
+def fetch_runs() -> pd.DataFrame:
+    mlflow.set_tracking_uri(TRACKING_URI)
+    exp = mlflow.get_experiment_by_name(EXPERIMENT)
+    if exp is None:
+        return pd.DataFrame()
+    runs = mlflow.search_runs([exp.experiment_id])
+    cols = {
+        "params.model_type": "model_type",
+        "metrics.accuracy": "accuracy",
+        "metrics.weighted_f1": "weighted_f1",
+        "metrics.auc_ovr_macro": "auc_ovr_macro",
+        "metrics.train_seconds": "train_seconds",
+    }
+    keep = [c for c in cols if c in runs.columns]
+    df = runs[keep].rename(columns=cols)
+    for c in ("accuracy", "weighted_f1", "auc_ovr_macro", "train_seconds"):
+        if c in df.columns:
+            df[c] = pd.to_numeric(df[c], errors="coerce")
+    df = df.dropna(subset=["accuracy", "model_type"])
+    df = df.sort_values("accuracy", ascending=False).drop_duplicates("model_type")
+    return df.reset_index(drop=True)
+
+
+def build_html() -> str:
+    eda = load_eda()
+    runs = fetch_runs()
+    today = datetime.now().strftime("%d %B %Y")
+    best = runs.iloc[0] if not runs.empty else None
+
+    # Model tablo slaytı için satırlar
+    model_rows = ""
+    if not runs.empty:
+        for i, r in runs.iterrows():
+            crown = "🏆 " if i == 0 else ""
+            f1 = f"{r['weighted_f1']:.4f}" if pd.notna(r.get('weighted_f1')) else "—"
+            auc = f"{r['auc_ovr_macro']:.4f}" if pd.notna(r.get('auc_ovr_macro')) else "—"
+            ts = f"{r['train_seconds']:.1f}s" if pd.notna(r.get('train_seconds')) else "—"
+            highlight = ' style="background:rgba(255,215,0,0.12);"' if i == 0 else ""
+            model_rows += f"""<tr{highlight}><td>{crown}<b>{r['model_type']}</b></td><td>{r['accuracy']:.4f}</td><td>{f1}</td><td>{auc}</td><td>{ts}</td></tr>"""
+
+    # EDA özet
+    total = f"{eda.get('total_rows', 0):,}" if eda else "—"
+    n_types = eda.get('unique_primary_type', "—") if eda else "—"
+    n_districts = eda.get('unique_district', "—") if eda else "—"
+    arrest = f"{eda.get('arrest_rate', 0):.1%}" if eda else "—"
+    year_range = (
+        f"{eda['yearly_trend'][0]['year']} – {eda['yearly_trend'][-1]['year']}"
+        if eda.get("yearly_trend") else "—"
+    )
+    top_types = ""
+    for t in (eda.get("top_primary_types", [])[:5] if eda else []):
+        top_types += f'<li><b>{t["primary_type"]}</b> — {t["count"]:,} olay</li>'
+
+    best_block = ""
+    if best is not None:
+        f1 = f"{best['weighted_f1']:.4f}" if pd.notna(best.get('weighted_f1')) else "—"
+        auc = f"{best['auc_ovr_macro']:.4f}" if pd.notna(best.get('auc_ovr_macro')) else "—"
+        best_block = f"""
+<div style="background:linear-gradient(135deg,#48bb78,#2f855a);padding:30px;border-radius:14px;margin-top:30px;">
+  <div style="font-size:2em;margin-bottom:8px;">🏆 En iyi model</div>
+  <div style="font-size:2.4em;font-weight:900;">{best['model_type']}</div>
+  <div style="margin-top:14px;font-size:1.1em;">
+    accuracy = <b>{best['accuracy']:.4f}</b> · weighted F1 = <b>{f1}</b> · AUC = <b>{auc}</b>
+  </div>
+</div>
+"""
+
+    return f"""<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>Chicago Crimes Pipeline — Sunum</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5/dist/reset.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5/dist/reveal.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5/dist/theme/black.css" id="theme">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5/plugin/highlight/monokai.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;900&display=swap" rel="stylesheet">
+
+<style>
+  :root {{
+    --r-main-font: "Inter", sans-serif;
+    --r-heading-font: "Inter", sans-serif;
+    --r-heading-text-transform: none;
+  }}
+  .reveal {{ font-family: "Inter", sans-serif; }}
+  .reveal h1, .reveal h2, .reveal h3 {{ font-weight: 800; letter-spacing: -0.01em; }}
+  .reveal h1 {{ font-size: 2.5em; }}
+  .reveal h2 {{ font-size: 1.8em; color: #f6e05e; }}
+  .reveal h3 {{ font-size: 1.3em; color: #a0aec0; }}
+  .reveal table {{ font-size: 0.7em; margin: 20px auto; }}
+  .reveal table th {{
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: white; padding: 10px 16px; border: none;
+  }}
+  .reveal table td {{ padding: 8px 14px; border-bottom: 1px solid rgba(255,255,255,0.1); }}
+  .reveal code {{
+    background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 4px;
+    font-size: 0.85em; color: #f6e05e;
+  }}
+  .reveal pre {{
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5); border-radius: 10px;
+  }}
+  .reveal ul li {{ margin: 12px 0; line-height: 1.5; }}
+  .reveal .progress {{ color: #667eea; }}
+
+  /* Title slide */
+  .title-slide {{
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white; padding: 60px 80px;
+    border-radius: 20px;
+  }}
+  .title-slide h1 {{ font-size: 2.2em; margin-bottom: 12px; }}
+  .title-slide .subtitle {{ font-size: 1.1em; opacity: 0.95; margin-bottom: 40px; }}
+  .title-slide .meta {{
+    background: rgba(0,0,0,0.2); border-radius: 14px; padding: 20px 30px;
+    text-align: left; font-size: 0.85em;
+  }}
+
+  /* KPI grid for stats slide */
+  .stat-grid {{
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px;
+    margin-top: 30px;
+  }}
+  .stat-card {{
+    background: rgba(102, 126, 234, 0.15);
+    border: 1px solid rgba(102, 126, 234, 0.3);
+    border-radius: 14px; padding: 24px;
+    backdrop-filter: blur(10px);
+  }}
+  .stat-card .icon {{ font-size: 2em; margin-bottom: 8px; }}
+  .stat-card .label {{
+    font-size: 0.75em; opacity: 0.7; text-transform: uppercase;
+    letter-spacing: 1px; margin-bottom: 6px;
+  }}
+  .stat-card .value {{ font-size: 1.7em; font-weight: 800; color: #f6e05e; }}
+
+  /* Architecture diagram */
+  .arch {{
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    padding: 24px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.6em; line-height: 1.4;
+    text-align: left; white-space: pre;
+  }}
+
+  /* Step cards */
+  .step-grid {{
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px;
+    margin-top: 22px;
+  }}
+  .step-card {{
+    background: linear-gradient(135deg, rgba(102,126,234,0.15), rgba(118,75,162,0.15));
+    border-radius: 12px; padding: 16px 20px; text-align: left;
+    border-left: 4px solid #f6e05e;
+  }}
+  .step-card .num {{ color: #f6e05e; font-weight: 700; font-size: 0.85em; }}
+  .step-card .title {{ font-weight: 700; margin: 6px 0 4px; }}
+  .step-card .desc {{ font-size: 0.65em; opacity: 0.8; line-height: 1.4; }}
+
+  /* Speaker notes hint */
+  .hint {{
+    position: fixed; bottom: 10px; left: 10px;
+    background: rgba(0,0,0,0.6); color: white;
+    padding: 6px 12px; border-radius: 6px;
+    font-size: 0.65em; opacity: 0.5; z-index: 100;
+  }}
+
+  /* Thanks slide */
+  .thanks-slide {{
+    text-align: center;
+  }}
+  .thanks-slide .thanks-text {{
+    font-size: 4em; font-weight: 900;
+    background: linear-gradient(135deg, #f6e05e, #ed8936);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin: 30px 0;
+  }}
+
+  .badge-pdf {{
+    display: inline-block; background: #667eea; padding: 3px 12px;
+    border-radius: 999px; font-size: 0.5em; vertical-align: middle;
+    margin-left: 10px; font-weight: 700;
+  }}
+</style>
+</head>
+<body>
+
+<div class="hint">← → veya Space ile ilerle · S = notlar · ESC = slayt görünümü · F = tam ekran</div>
+
+<div class="reveal">
+<div class="slides">
+
+<!-- ========== Slide 1: Title ========== -->
+<section>
+  <div class="title-slide">
+    <div style="font-size:0.75em;opacity:0.85;letter-spacing:2px;margin-bottom:10px;">📊 BLM442 · DÖNEM PROJESİ</div>
+    <h1>Chicago Crimes —<br>Uçtan Uca Büyük Veri Pipeline'ı</h1>
+    <div class="subtitle">Apache Kafka · Spark · Delta Lake · 5 ML Modeli · MLflow · Streamlit</div>
+    <div class="meta">
+      <div style="font-size:0.95em;font-weight:700;margin-bottom:8px;">🎓 Kocaeli Üniversitesi · Bilgisayar Mühendisliği</div>
+      <div style="opacity:0.9;">Dr. Ayşe Gül Eker · 2025-2026 Bahar · {today}</div>
+      <hr style="border:0;border-top:1px solid rgba(255,255,255,0.2);margin:14px 0;">
+      <div style="font-size:0.85em;line-height:1.7;">
+        <b>Takım:</b> Emre Aytaş (220202098) · Hatice Kübra Kılıçaslan (220202077)<br>
+        Berker Yiğit (220202046) · Mertcan Kuzey (240202009)
+      </div>
+    </div>
+  </div>
+  <aside class="notes">
+    Hoş geldiniz. 10-15 dakikalık bir sunum yapacağız: Chicago Crimes 2001-Present veriseti üzerinde
+    PDF'in 7 adımının her birini somut bileşenlerle gerçekleştirdik.
+  </aside>
+</section>
+
+<!-- ========== Slide 2: Problem & Dataset ========== -->
+<section>
+  <h2>Problem ve Veri Seti</h2>
+  <div style="text-align:left;font-size:0.85em;line-height:1.8;">
+    <p><b>Veri seti:</b> <a href="https://data.cityofchicago.org/Public-Safety/Crimes-2001-to-Present/ijzp-q8t2" style="color:#f6e05e;">Chicago Crimes 2001–Present</a> — Chicago Police CLEAR sistemi</p>
+    <ul>
+      <li><b>~7.9 milyon olay</b>, 23 yıl, 22 kolon</li>
+      <li>Kolonlar: ID, Date, Block, Primary Type, District, Ward, Beat, Lat/Lon, Arrest, Domestic ...</li>
+      <li><b>Görev:</b> Çoklu sınıf <code>Primary Type</code> sınıflandırması (PDF: "suç tipi ve bölge tahmini")</li>
+      <li>35+ suç tipi var → Top-5 + OTHER = 6 dengeli sınıf</li>
+    </ul>
+  </div>
+  <aside class="notes">
+    Chicago polisinin CLEAR sisteminden gerçek dünya verisi. 2001'den günümüze 7.9 milyon olay.
+    Sınıf dengesizliği problemi var (THEFT %22, ARSON %0.1), bu yüzden top-5 + OTHER yaklaşımı.
+  </aside>
+</section>
+
+<!-- ========== Slide 3: Data Summary (live KPI) ========== -->
+<section>
+  <h2>Veri Özeti <span class="badge-pdf">Canlı veri</span></h2>
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="icon">📊</div>
+      <div class="label">Toplam silver satır</div>
+      <div class="value">{total}</div>
+    </div>
+    <div class="stat-card">
+      <div class="icon">🏷️</div>
+      <div class="label">Benzersiz suç tipi</div>
+      <div class="value">{n_types}</div>
+    </div>
+    <div class="stat-card">
+      <div class="icon">🗺️</div>
+      <div class="label">Benzersiz ilçe</div>
+      <div class="value">{n_districts}</div>
+    </div>
+    <div class="stat-card">
+      <div class="icon">🚔</div>
+      <div class="label">Tutuklama oranı</div>
+      <div class="value">{arrest}</div>
+    </div>
+    <div class="stat-card">
+      <div class="icon">📅</div>
+      <div class="label">Yıl aralığı</div>
+      <div class="value" style="font-size:1.2em;">{year_range}</div>
+    </div>
+    <div class="stat-card">
+      <div class="icon">🤖</div>
+      <div class="label">Eğitilen modeller</div>
+      <div class="value">5</div>
+    </div>
+  </div>
+  <aside class="notes">
+    Canlı sayılar — bu slayt MLflow ve EDA özetinden otomatik üretildi.
+    Silver tablomuzda 474K satır, 34 farklı suç tipi var. Tutuklama oranı %21.
+  </aside>
+</section>
+
+<!-- ========== Slide 4: Architecture ========== -->
+<section>
+  <h2>Mimari</h2>
+  <div class="arch">Crimes.csv ──▶ crime_producer ──Kafka──▶ Spark Structured Streaming
+                                              │
+                                              ▼
+                       Delta Lake: Bronze (raw event store)
+                                              │
+                                              ▼
+                           Silver (dedup + null clean + features)
+                                              │
+                       ┌──────────────────────┼────────────────────┐
+                       ▼                      ▼                    ▼
+                Gold tabloları         EDA notebook       5 ML modeli
+                                                                   │
+                                                                   ▼
+                                                            MLflow registry
+                                                                   │
+                                                                   ▼
+                                                              Inference →
+                                                          Streamlit Dashboard</div>
+  <div style="margin-top:20px;font-size:0.7em;opacity:0.8;">
+    7 servis · Docker Compose · Kafka KRaft · Spark 3.5 · Delta 3.2 · MLflow 2.16
+  </div>
+  <aside class="notes">
+    Mimari uçtan uca: producer Kafka'ya yazar, Spark streaming bronze'a, batch silver/gold/ML adımları.
+    Hepsi Docker container'da, named volume'lar ile state persist.
+  </aside>
+</section>
+
+<!-- ========== Slide 5: PDF Steps ========== -->
+<section>
+  <h2>PDF Adımlarının Eşleştirmesi</h2>
+  <div class="step-grid">
+    <div class="step-card">
+      <div class="num">ADIM 1 + 2</div>
+      <div class="title">Docker + Kafka Producer</div>
+      <div class="desc"><code>docker-compose.yml</code> 7 servis + <code>crime_producer.py</code> (3 hız modu: fixed/speedup/burst)</div>
+    </div>
+    <div class="step-card">
+      <div class="num">ADIM 3</div>
+      <div class="title">Spark Streaming + Delta</div>
+      <div class="desc">Bronze (Kafka→Delta), Silver (dedup + features), Gold (3 agregat tablo)</div>
+    </div>
+    <div class="step-card">
+      <div class="num">ADIM 4</div>
+      <div class="title">EDA</div>
+      <div class="desc"><code>01_eda.py</code>: total/unique sayımları, yıllık/saatlik/haftalık trend</div>
+    </div>
+    <div class="step-card">
+      <div class="num">ADIM 5</div>
+      <div class="title">Feature Engineering</div>
+      <div class="desc"><code>02_feature_engineering.py</code>: 13 özellik (zaman, konum, koordinat, bağlam)</div>
+    </div>
+    <div class="step-card" style="grid-column:span 2;">
+      <div class="num">ADIM 6 — En kritik</div>
+      <div class="title">5 ML Modeli + MLflow</div>
+      <div class="desc">LR + DT + RF + GBT(OvR) + NB · Her run için <b>Feature Importance + Confusion Matrix + AUC + per-class metric</b> + model registry</div>
+    </div>
+    <div class="step-card" style="grid-column:span 2;">
+      <div class="num">ADIM 7</div>
+      <div class="title">Dashboard + Görseller</div>
+      <div class="desc">Streamlit 5 sekme + HTML rapor (<code>docs/rapor.html</code>) · PDF'in tüm zorunlu görselleri</div>
+    </div>
+  </div>
+  <aside class="notes">
+    Her PDF adımı somut bir koda denk geliyor. En kritik adım 6: 5 model karşılaştırması.
+    Feature Importance ve Confusion Matrix zorunlu — her model için MLflow'a artifact olarak yazıldı.
+  </aside>
+</section>
+
+<!-- ========== Slide 6: Bronze/Silver/Gold ========== -->
+<section>
+  <h2>Bronze · Silver · Gold</h2>
+  <div style="text-align:left;font-size:0.78em;line-height:1.7;">
+    <h3>🥉 Bronze (raw event store)</h3>
+    <ul>
+      <li>Kafka <code>crimes</code> → Delta <code>/opt/delta/bronze/crimes</code></li>
+      <li><b>Kritik fix:</b> <code>maxOffsetsPerTrigger=200000</code> (yoksa cluster dev batch'te commit etmiyor)</li>
+      <li>partitionBy(event_date)</li>
+    </ul>
+    <h3>🥈 Silver (ML-hazır)</h3>
+    <ul>
+      <li>dedup by <code>id</code> + null filtre (district, lat/lon, primary_type)</li>
+      <li>Türetilmiş: <code>hour_of_day</code>, <code>day_of_week</code>, <code>month</code>, <code>event_year</code></li>
+      <li>partitionBy(event_year) — fan-out önleyici</li>
+    </ul>
+    <h3>🥇 Gold (analitik + ML feature view)</h3>
+    <ul>
+      <li><code>type_stats</code>, <code>district_stats</code>, <code>hourly_stats</code>, <code>feature_view</code></li>
+      <li>Delta <code>OPTIMIZE</code> compaction → 67K küçük parquet → 8.5K büyük</li>
+    </ul>
+  </div>
+  <aside class="notes">
+    Medallion architecture: bronze raw, silver temizlenmiş + feature, gold agregat.
+    Critical performance fix: bronze maxOffsetsPerTrigger. Tasarımca silver event_year (28 dizin)
+    çünkü event_date 8K+ dizin yaratacaktı.
+  </aside>
+</section>
+
+<!-- ========== Slide 7: Features ========== -->
+<section>
+  <h2>Adım 5 — 13 Özellik</h2>
+  <table style="margin:30px auto;font-size:0.75em;">
+    <tr><th>Tür</th><th>Özellikler</th><th>İş mantığı</th></tr>
+    <tr><td><b>Zaman (4)</b></td><td><code>hour_of_day, day_of_week, month, event_year</code></td><td>Theft öğleden sonra, battery gece</td></tr>
+    <tr><td><b>Konum (4)</b></td><td><code>district, ward, community_area, beat</code></td><td>Kuzey-güney suç dağılım farkı</td></tr>
+    <tr><td><b>Koordinat (2)</b></td><td><code>latitude, longitude</code></td><td>Yerleşim örüntüleri</td></tr>
+    <tr><td><b>Bağlam (2)</b></td><td><code>arrest_int, domestic_int</code></td><td>Domestic battery/assault korelasyonu</td></tr>
+    <tr><td><b>Türetilmiş bool (2)</b></td><td><code>is_weekend, is_night</code></td><td>Hafta sonu + gece riski</td></tr>
+  </table>
+  <p style="font-size:0.8em;opacity:0.85;">Her özelliğin iş mantığı <code>02_feature_engineering.py</code> docstring'inde · <code>gold/feature_view</code> Delta tablosuna materyalize edildi</p>
+  <aside class="notes">
+    PDF en az 5 özellik istiyor — biz 13 üretttik. Her birinin neden faydalı olduğunu docstring'de yazdık.
+  </aside>
+</section>
+
+<!-- ========== Slide 8: 5 Model Results ========== -->
+<section>
+  <h2>5 Model Karşılaştırması <span class="badge-pdf">Adım 6 Zorunlu</span></h2>
+  <table>
+    <tr><th>Model</th><th>Accuracy</th><th>F1</th><th>AUC</th><th>Train</th></tr>
+    {model_rows}
+  </table>
+  {best_block}
+  <aside class="notes">
+    Tüm 5 model MLflow'a kaydedildi: Logistic Regression, Decision Tree, Random Forest, GBT+OneVsRest,
+    Naive Bayes (gaussian — longitude negatif olabildiği için multinomial değil).
+    Random Forest kazandı: accuracy 0.45, AUC 0.70. Baseline %22'yi iki katına çıkardık.
+  </aside>
+</section>
+
+<!-- ========== Slide 9: Feature Importance ========== -->
+<section>
+  <h2>Feature Importance <span class="badge-pdf">PDF Zorunlu</span></h2>
+  <p>Random Forest split önemine göre en etkili özellikler:</p>
+  <ol style="text-align:left;margin:25px auto;max-width:600px;font-size:0.85em;line-height:1.9;">
+    <li><b>latitude</b> + <b>longitude</b> — coğrafi konum suç tipini belirleyici</li>
+    <li><b>hour_of_day</b> — günün saati (theft gündüz, battery gece)</li>
+    <li><b>district</b> — Chicago ilçesi (north/south side farkı)</li>
+    <li><b>community_area</b> — daha ince konum granularity</li>
+    <li><b>event_year</b> — uzun vadeli trend (narcotics 2010 sonrası azaldı)</li>
+  </ol>
+  <p style="font-size:0.75em;opacity:0.75;margin-top:20px;">
+    Tam grafik: <a href="rapor.html#fi" style="color:#f6e05e;">docs/rapor.html → Feature Importance</a>
+  </p>
+  <aside class="notes">
+    Coğrafi koordinatlar ve zaman en güçlü sinyaller. Lokasyon × saat etkileşimi
+    ağaç-tabanlı modellerin lineer modellerden iyi olmasının sebebi.
+  </aside>
+</section>
+
+<!-- ========== Slide 10: Top Crime Types ========== -->
+<section>
+  <h2>Top 5 Suç Tipi</h2>
+  <ol style="text-align:left;margin:30px auto;max-width:700px;font-size:0.85em;line-height:2;">
+    {top_types}
+  </ol>
+  <p style="margin-top:20px;font-size:0.8em;opacity:0.85;">
+    Top-5 üzerine OTHER bucket'ı → 6 dengeli sınıf. Bu sayede majority-class baseline %22 → modellerimizden %45 (iki kat iyileşme).
+  </p>
+  <aside class="notes">
+    Theft her zaman birinci. Domestic battery için arrest_rate yüksek.
+  </aside>
+</section>
+
+<!-- ========== Slide 11: Challenges ========== -->
+<section>
+  <h2>Karşılaşılan Zorluklar</h2>
+  <table style="font-size:0.7em;">
+    <tr><th>Sorun</th><th>Çözüm</th></tr>
+    <tr><td>Bronze dev batch commit etmiyordu</td><td><code>maxOffsetsPerTrigger</code> + worker 2→8 core</td></tr>
+    <tr><td>Silver 67K küçük parquet fan-out</td><td>partitionBy(event_year) + Delta <code>OPTIMIZE</code></td></tr>
+    <tr><td>Dashboard count_rows() askıda</td><td>Delta <code>add_actions.num_records</code> metadata</td></tr>
+    <tr><td>GBT Spark MLlib'de multi-class yok</td><td><code>OneVsRest(GBTClassifier)</code> wrapper</td></tr>
+    <tr><td>NaiveBayes neg longitude ile kırılıyor</td><td><code>modelType="gaussian"</code></td></tr>
+    <tr><td>multi_class_auc UNRESOLVED_ROUTINE</td><td><code>pyspark.ml.functions.vector_to_array</code> import</td></tr>
+  </table>
+  <aside class="notes">
+    Her sorun bir öğrenim noktası. Bronze fix Spark streaming + Kafka entegrasyonu tecrübesi,
+    silver OPTIMIZE Delta lake operations, GBT OneVsRest multi-class wrap.
+  </aside>
+</section>
+
+<!-- ========== Slide 12: Demo & Deliverables ========== -->
+<section>
+  <h2>Teslimler ve Demo</h2>
+  <div style="text-align:left;font-size:0.8em;line-height:1.7;">
+    <h3>🔧 Tek komut</h3>
+    <pre style="font-size:0.75em;"><code>make verify         # statik kontrol
+make run-all        # uçtan uca (~30-50 dk)
+make report         # HTML rapor üret
+make presentation   # bu slideshow'u üret</code></pre>
+
+    <h3>🌐 Erişim noktaları</h3>
+    <ul>
+      <li><b>Streamlit Dashboard:</b> http://localhost:8501 (5 sekme)</li>
+      <li><b>MLflow UI:</b> http://localhost:5000 (5 model + artifact'ler)</li>
+      <li><b>Spark UI:</b> http://localhost:8080</li>
+      <li><b>HTML rapor:</b> <code>docs/rapor.html</code></li>
+      <li><b>Bu sunum:</b> <code>docs/sunum.html</code> ← şu an buradasınız</li>
+    </ul>
+
+    <h3>📦 Repository</h3>
+    <p><a href="https://github.com/bigdataKOU/bigdataproje" style="color:#f6e05e;">github.com/bigdataKOU/bigdataproje</a></p>
+  </div>
+  <aside class="notes">
+    Her şey tek komutla tekrarlanabilir. Repo public, commit geçmişi mevcut.
+  </aside>
+</section>
+
+<!-- ========== Slide 13: Q&A ========== -->
+<section style="text-align:center;">
+  <div style="font-size:5em;margin-bottom:30px;">❓</div>
+  <h1 style="color:#f6e05e;">Sorular?</h1>
+  <p style="margin-top:30px;opacity:0.8;">Pipeline mimarisi · Model seçimi · Feature engineering · Karşılaşılan zorluklar</p>
+  <aside class="notes">
+    Soru-cevap. Her takım üyesi kendi sorumluluk alanına dair detay verebilir.
+  </aside>
+</section>
+
+<!-- ========== Slide 14: Thanks ========== -->
+<section class="thanks-slide">
+  <div style="font-size:6em;">🎓</div>
+  <div class="thanks-text">Teşekkürler</div>
+  <p style="font-size:1.1em;line-height:1.7;max-width:700px;margin:30px auto;">
+    Sayın hocamız <b style="color:#f6e05e;">Dr. Ayşe Gül Eker</b>'e, bu projeyle endüstri-standart bir
+    veri mühendisliği akışını uçtan uca deneyimleme fırsatı verdiği için teşekkür ederiz.
+  </p>
+  <p style="opacity:0.75;margin-top:30px;">Kocaeli Üniversitesi · Bilgisayar Mühendisliği · BLM442</p>
+  <p style="opacity:0.6;font-size:0.8em;">Bizleri dinlediğiniz için teşekkürler ❤️</p>
+  <aside class="notes">
+    Sunum bitti. Final teşekkür. Ortalama 10-12 dakika sürdü.
+  </aside>
+</section>
+
+</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5/plugin/notes/notes.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5/plugin/highlight/highlight.js"></script>
+<script>
+  Reveal.initialize({{
+    hash: true,
+    slideNumber: 'c/t',
+    controls: true,
+    progress: true,
+    transition: 'slide',
+    backgroundTransition: 'fade',
+    plugins: [RevealNotes, RevealHighlight]
+  }});
+</script>
+
+</body>
+</html>
+"""
+
+
+def main() -> int:
+    html = build_html()
+    OUT_HTML.parent.mkdir(parents=True, exist_ok=True)
+    with open(OUT_HTML, "w", encoding="utf-8") as f:
+        f.write(html)
+    print(f"wrote {OUT_HTML} ({os.path.getsize(OUT_HTML):,} bytes)")
+    return 0
+
+
+if __name__ == "__main__":
+    main()

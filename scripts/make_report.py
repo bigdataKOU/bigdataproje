@@ -304,102 +304,267 @@ def build_html() -> str:
 <head>
 <meta charset="utf-8">
 <title>Chicago Crimes Pipeline — Teknik Rapor</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;900&display=swap" rel="stylesheet">
 <style>
-  body {{ font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
-         max-width: 1100px; margin: 30px auto; padding: 0 20px; color: #222;
-         line-height: 1.6; }}
-  h1 {{ font-size: 2em; border-bottom: 3px solid #1e88e5; padding-bottom: 0.3em; }}
-  h2 {{ color: #1565c0; margin-top: 2em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; }}
-  h3 {{ color: #1976d2; }}
-  .header-box {{ background: linear-gradient(135deg, #1e88e5, #0d47a1);
-                  color: white; padding: 30px; border-radius: 8px;
-                  margin-bottom: 30px; }}
-  .header-box h1 {{ color: white; border: none; margin: 0; font-size: 1.7em; }}
-  .header-box .sub {{ font-size: 1.1em; margin-top: 10px; }}
-  .student-table {{ background: rgba(255,255,255,0.1); padding: 12px;
-                     border-radius: 6px; margin-top: 15px; }}
-  .student-table table {{ width: 100%; border-collapse: collapse; }}
-  .student-table td {{ padding: 6px 12px; color: white; }}
-  .student-table tr td:first-child {{ font-weight: bold; }}
-  .kpi {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-          gap: 14px; margin: 20px 0; }}
-  .kpi .card {{ background: #f4f8fc; border-left: 4px solid #1e88e5;
-                padding: 14px; border-radius: 4px; }}
-  .kpi .label {{ font-size: 0.85em; color: #555; }}
-  .kpi .value {{ font-size: 1.5em; font-weight: bold; color: #0d47a1;
-                  margin-top: 4px; }}
-  .winner {{ background: linear-gradient(135deg, #43a047, #2e7d32);
-             color: white; padding: 20px; border-radius: 6px;
-             margin: 15px 0; font-size: 1.1em; }}
-  .metric-table {{ border-collapse: collapse; width: 100%; margin: 15px 0;
-                    background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }}
-  .metric-table th, .metric-table td {{ padding: 10px 14px; border-bottom: 1px solid #e0e0e0;
-                                          text-align: left; }}
-  .metric-table th {{ background: #1565c0; color: white; }}
-  .metric-table tr:first-child td {{ font-weight: bold; background: #fff8e1; }}
-  blockquote {{ border-left: 4px solid #fb8c00; padding: 10px 16px; background: #fff8e1; margin: 15px 0; }}
-  code {{ background: #f5f5f5; padding: 2px 6px; border-radius: 3px; font-size: 0.9em; }}
-  .footer {{ text-align: center; margin-top: 60px; padding: 30px; background: #f5f5f5; border-radius: 8px; }}
-  .footer .thanks {{ font-size: 1.8em; color: #1565c0; font-weight: bold; }}
+  * {{ box-sizing: border-box; }}
+  html {{ scroll-behavior: smooth; }}
+  body {{
+    font-family: "Inter", -apple-system, "Segoe UI", Roboto, sans-serif;
+    margin: 0; padding: 0; color: #1a202c;
+    line-height: 1.7; background: #f7fafc;
+  }}
+  .container {{ max-width: 1180px; margin: 0 auto; padding: 0 24px 60px; }}
+
+  /* Modern hero header */
+  .hero {{
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white; padding: 60px 0 80px;
+    position: relative; overflow: hidden;
+    margin-bottom: 40px;
+  }}
+  .hero::before {{
+    content: ""; position: absolute; inset: 0;
+    background: radial-gradient(circle at 80% 20%, rgba(255,255,255,0.12) 0%, transparent 50%),
+                radial-gradient(circle at 20% 80%, rgba(255,255,255,0.08) 0%, transparent 50%);
+  }}
+  .hero-inner {{ position: relative; max-width: 1180px; margin: 0 auto; padding: 0 24px; }}
+  .hero .badge {{
+    display: inline-block; padding: 6px 14px;
+    background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 999px; font-size: 0.85em; font-weight: 600;
+    backdrop-filter: blur(10px); margin-bottom: 18px;
+  }}
+  .hero h1 {{
+    font-size: 2.6em; font-weight: 900; margin: 0 0 12px;
+    line-height: 1.15; letter-spacing: -0.02em;
+  }}
+  .hero .subtitle {{ font-size: 1.15em; opacity: 0.95; max-width: 800px; margin-bottom: 28px; }}
+  .info-grid {{
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 18px; margin-top: 28px;
+  }}
+  .info-card {{
+    background: rgba(255,255,255,0.13); backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.2); border-radius: 14px; padding: 18px 22px;
+  }}
+  .info-card h4 {{
+    margin: 0 0 12px; font-size: 0.78em; text-transform: uppercase;
+    letter-spacing: 1.5px; font-weight: 700; opacity: 0.85;
+  }}
+  .info-card table {{ width: 100%; border-collapse: collapse; }}
+  .info-card td {{ padding: 4px 0; font-size: 0.94em; }}
+  .info-card tr td:first-child {{ opacity: 0.85; padding-right: 14px; }}
+  .info-card tr td:last-child {{ font-weight: 600; text-align: right; }}
+
+  /* Main typography */
+  h1 {{ font-size: 2em; font-weight: 800; color: #2d3748; }}
+  h2 {{
+    color: #2d3748; margin-top: 3em; padding-bottom: 0.5em;
+    border-bottom: 2px solid #e2e8f0; font-weight: 700; font-size: 1.7em;
+    position: relative;
+  }}
+  h2::before {{
+    content: ""; position: absolute; bottom: -2px; left: 0; width: 60px; height: 3px;
+    background: linear-gradient(90deg, #667eea, #764ba2); border-radius: 2px;
+  }}
+  h3 {{ color: #4a5568; margin-top: 2em; font-weight: 700; }}
+  p {{ color: #2d3748; }}
+
+  /* KPI cards */
+  .kpi {{
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 18px; margin: 24px 0;
+  }}
+  .kpi .card {{
+    background: white; padding: 22px 24px; border-radius: 14px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.03);
+    border-top: 4px solid; transition: transform 0.2s, box-shadow 0.2s;
+  }}
+  .kpi .card:hover {{ transform: translateY(-2px); box-shadow: 0 10px 25px rgba(0,0,0,0.08); }}
+  .kpi .card:nth-child(1) {{ border-top-color: #667eea; }}
+  .kpi .card:nth-child(2) {{ border-top-color: #f56565; }}
+  .kpi .card:nth-child(3) {{ border-top-color: #48bb78; }}
+  .kpi .card:nth-child(4) {{ border-top-color: #ed8936; }}
+  .kpi .card:nth-child(5) {{ border-top-color: #38b2ac; }}
+  .kpi .card:nth-child(6) {{ border-top-color: #9f7aea; }}
+  .kpi .icon {{ font-size: 1.5em; margin-bottom: 6px; }}
+  .kpi .label {{ font-size: 0.82em; color: #718096; font-weight: 600;
+                  text-transform: uppercase; letter-spacing: 0.5px; }}
+  .kpi .value {{ font-size: 1.7em; font-weight: 800; color: #2d3748; margin-top: 6px; line-height: 1.1; }}
+
+  /* Winner banner */
+  .winner {{
+    background: linear-gradient(135deg, #48bb78 0%, #2f855a 100%);
+    color: white; padding: 24px 28px; border-radius: 14px; margin: 20px 0;
+    box-shadow: 0 10px 25px rgba(72, 187, 120, 0.25);
+    display: flex; align-items: center; gap: 18px;
+  }}
+  .winner .trophy {{ font-size: 2.5em; }}
+  .winner .text {{ flex: 1; }}
+  .winner .text b {{ font-size: 1.15em; }}
+
+  /* Tables */
+  .metric-table {{
+    border-collapse: separate; border-spacing: 0; width: 100%; margin: 18px 0;
+    background: white; border-radius: 12px; overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }}
+  .metric-table th, .metric-table td {{
+    padding: 12px 16px; border-bottom: 1px solid #edf2f7; text-align: left;
+  }}
+  .metric-table th {{
+    background: linear-gradient(135deg, #4c51bf 0%, #553c9a 100%);
+    color: white; font-weight: 600; font-size: 0.92em;
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }}
+  .metric-table tr:first-of-type td {{ background: #fffbeb; font-weight: 600; }}
+  .metric-table tr:hover td {{ background: #f7fafc; }}
+  .metric-table tr:last-child td {{ border-bottom: none; }}
+
+  /* Code blocks */
+  code {{ background: #edf2f7; color: #2d3748; padding: 2px 8px; border-radius: 4px;
+          font-size: 0.88em; font-family: "JetBrains Mono", "Consolas", monospace; }}
+  pre {{ background: #1a202c; color: #e2e8f0; padding: 20px;
+         border-radius: 12px; overflow-x: auto; font-size: 0.85em;
+         font-family: "JetBrains Mono", "Consolas", monospace;
+         box-shadow: 0 4px 12px rgba(0,0,0,0.1); }}
+
+  /* Section cards */
+  .section-card {{
+    background: white; border-radius: 14px; padding: 24px 28px;
+    margin: 18px 0; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }}
+
+  /* Charts container */
+  .chart-block {{
+    background: white; border-radius: 14px; padding: 20px;
+    margin: 18px 0; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }}
+
+  /* PDF compliance badge */
+  .pdf-badge {{
+    display: inline-block; background: #4c51bf; color: white;
+    padding: 2px 10px; border-radius: 999px; font-size: 0.72em;
+    font-weight: 700; vertical-align: middle; margin-left: 8px;
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }}
+
+  /* Footer */
+  .footer {{
+    text-align: center; margin-top: 80px; padding: 50px 30px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white; border-radius: 20px;
+  }}
+  .footer .thanks {{ font-size: 2.5em; font-weight: 900; margin: 10px 0 18px; }}
+  .footer p {{ color: rgba(255,255,255,0.95); margin: 6px 0; }}
+
+  /* TOC */
+  .toc {{ background: white; border-radius: 14px; padding: 22px 28px;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin: 24px 0; }}
+  .toc h3 {{ margin-top: 0; font-size: 1em; text-transform: uppercase;
+             letter-spacing: 1.5px; color: #718096; }}
+  .toc ol {{ margin: 8px 0; padding-left: 20px; }}
+  .toc li {{ padding: 4px 0; }}
+  .toc a {{ color: #4c51bf; text-decoration: none; font-weight: 500; }}
+  .toc a:hover {{ text-decoration: underline; }}
+
   ul li {{ margin: 6px 0; }}
+
+  @media print {{
+    body {{ background: white; }}
+    .hero {{ background: #4c51bf !important; -webkit-print-color-adjust: exact; }}
+    .winner, .footer {{ background: #48bb78 !important; -webkit-print-color-adjust: exact; }}
+    h2::before {{ background: #4c51bf !important; }}
+  }}
 </style>
 </head>
 <body>
 
-<div class="header-box">
-  <h1>Chicago Crimes — Uçtan Uca Büyük Veri Pipeline'ı</h1>
-  <div class="sub">BLM442 Büyük Veri Analizine Giriş · Dönem Projesi · {today}</div>
-  <div class="student-table">
-    <table>
-      <tr><td>Üniversite</td><td>Kocaeli Üniversitesi</td></tr>
-      <tr><td>Bölüm</td><td>Bilgisayar Mühendisliği</td></tr>
-      <tr><td>Ders</td><td>BLM442 — Büyük Veri Analizine Giriş</td></tr>
-      <tr><td>Öğretim Üyesi</td><td>Dr. Ayşe Gül Eker</td></tr>
-      <tr><td>Dönem</td><td>2025–2026 Bahar</td></tr>
-    </table>
-  </div>
-  <h3 style="color:white; margin-top:20px;">Takım</h3>
-  <div class="student-table">
-    <table>
-      <tr><td>Emre Aytaş</td><td>220202098</td></tr>
-      <tr><td>Hatice Kübra Kılıçaslan</td><td>220202077</td></tr>
-      <tr><td>Berker Yiğit</td><td>220202046</td></tr>
-      <tr><td>Mertcan Kuzey</td><td>240202009</td></tr>
-    </table>
+<div class="hero">
+  <div class="hero-inner">
+    <div class="badge">📊 BLM442 · Dönem Projesi · {today}</div>
+    <h1>Chicago Crimes — Uçtan Uca Büyük Veri Pipeline'ı</h1>
+    <div class="subtitle">
+      Apache Kafka · Spark Structured Streaming · Delta Lake · Spark MLlib (5 model) · MLflow · Streamlit
+    </div>
+    <div class="info-grid">
+      <div class="info-card">
+        <h4>🎓 Kurum</h4>
+        <table>
+          <tr><td>Üniversite</td><td>Kocaeli Üniversitesi</td></tr>
+          <tr><td>Bölüm</td><td>Bilgisayar Mühendisliği</td></tr>
+          <tr><td>Ders</td><td>BLM442</td></tr>
+          <tr><td>Öğretim Üyesi</td><td>Dr. Ayşe Gül Eker</td></tr>
+          <tr><td>Dönem</td><td>2025–2026 Bahar</td></tr>
+        </table>
+      </div>
+      <div class="info-card">
+        <h4>👥 Takım</h4>
+        <table>
+          <tr><td>Emre Aytaş</td><td>220202098</td></tr>
+          <tr><td>Hatice Kübra Kılıçaslan</td><td>220202077</td></tr>
+          <tr><td>Berker Yiğit</td><td>220202046</td></tr>
+          <tr><td>Mertcan Kuzey</td><td>240202009</td></tr>
+        </table>
+      </div>
+    </div>
   </div>
 </div>
 
-<h2>1. Projenin Amacı</h2>
+<div class="container">
+
+<div class="toc">
+  <h3>İçindekiler</h3>
+  <ol>
+    <li><a href="#amac">Projenin Amacı</a></li>
+    <li><a href="#eda">Veri Özeti (EDA)</a></li>
+    <li><a href="#mimari">Mimari ve Adım Eşleştirmesi</a></li>
+    <li><a href="#models">5 ML Modeli Sonuçları</a></li>
+    <li><a href="#fi">Feature Importance</a></li>
+    <li><a href="#cm">Confusion Matrix</a></li>
+    <li><a href="#roc">Per-class Precision/Recall</a></li>
+    <li><a href="#trend">Zaman Serisi Analizi</a></li>
+    <li><a href="#dagilim">Dağılım Analizi</a></li>
+    <li><a href="#zorluklar">Karşılaşılan Zorluklar</a></li>
+    <li><a href="#reproduce">Tekrarlanabilirlik</a></li>
+    <li><a href="#kriterler">PDF Değerlendirme Kriterleri</a></li>
+  </ol>
+</div>
+
+<h2 id="amac">1. Projenin Amacı</h2>
+<div class="section-card">
 <p>Gerçek dünya senaryosuna uygun, <b>uçtan uca konteynerize edilmiş bir büyük veri pipeline'ı</b> kurulmuştur:
 <b>Kafka → Spark Structured Streaming → Delta Lake → Spark MLlib → MLflow → Streamlit</b>.
-Veri seti olarak <a href="https://data.cityofchicago.org/Public-Safety/Crimes-2001-to-Present/ijzp-q8t2">Chicago Crimes 2001 – Present</a>
+Veri seti olarak <a href="https://data.cityofchicago.org/Public-Safety/Crimes-2001-to-Present/ijzp-q8t2" target="_blank" rel="noopener">Chicago Crimes 2001 – Present</a>
 (~7.9 milyon olay) kullanılmış, ML görevi olarak <b>çoklu sınıf "Primary Type" (suç tipi) sınıflandırma</b>
 yapılmıştır (PDF metnindeki "suç tipi ve bölge tahmini").</p>
+</div>
 """)
 
     # KPI cards
     if eda_card:
         html_parts.append(f"""
-<h2>2. Veri Özeti (EDA — Adım 4)</h2>
+<h2 id="eda">2. Veri Özeti (EDA) <span class="pdf-badge">Adım 4</span></h2>
 <div class="kpi">
-  <div class="card"><div class="label">Toplam silver satır</div>
+  <div class="card"><div class="icon">📊</div><div class="label">Toplam silver satır</div>
     <div class="value">{eda_card['total_rows']}</div></div>
-  <div class="card"><div class="label">Benzersiz suç tipi</div>
+  <div class="card"><div class="icon">🏷️</div><div class="label">Benzersiz suç tipi</div>
     <div class="value">{eda_card['unique_types']}</div></div>
-  <div class="card"><div class="label">Benzersiz ilçe</div>
+  <div class="card"><div class="icon">🗺️</div><div class="label">Benzersiz ilçe</div>
     <div class="value">{eda_card['unique_districts']}</div></div>
-  <div class="card"><div class="label">Tutuklama oranı</div>
+  <div class="card"><div class="icon">🚔</div><div class="label">Tutuklama oranı</div>
     <div class="value">{eda_card['arrest_rate']}</div></div>
-  <div class="card"><div class="label">Domestic oranı</div>
+  <div class="card"><div class="icon">🏠</div><div class="label">Domestic oranı</div>
     <div class="value">{eda_card['domestic_rate']}</div></div>
-  <div class="card"><div class="label">Yıl aralığı</div>
+  <div class="card"><div class="icon">📅</div><div class="label">Yıl aralığı</div>
     <div class="value">{eda_card['year_range']}</div></div>
 </div>
 """)
 
     html_parts.append("""
-<h2>3. Pipeline Mimarisi</h2>
-<pre style="background:#f5f5f5; padding:15px; border-radius:6px; overflow-x:auto;">
+<h2 id="mimari">3. Pipeline Mimarisi</h2>
+<div class="section-card">
+<pre>
 Crimes.csv ──▶ crime_producer ──Kafka──▶ Spark Structured Streaming
                                               │
                                               ▼
@@ -424,6 +589,7 @@ Crimes.csv ──▶ crime_producer ──Kafka──▶ Spark Structured Stream
                                                                      ▼
                                                           Streamlit Dashboard
 </pre>
+</div>
 
 <h3>Adım Eşleştirmesi (PDF metniyle birebir)</h3>
 <table class="metric-table">
@@ -439,49 +605,55 @@ Crimes.csv ──▶ crime_producer ──Kafka──▶ Spark Structured Stream
 """)
 
     # 5 model comparison
-    html_parts.append("<h2>4. Adım 6 — Beş ML Modeli Sonuçları</h2>")
+    html_parts.append('<h2 id="models">4. Beş ML Modeli Sonuçları <span class="pdf-badge">Adım 6</span></h2>')
     if not runs.empty:
         f1_val = runs.iloc[0].get('weighted_f1')
         f1_str = f"{f1_val:.4f}" if pd.notna(f1_val) else "—"
         html_parts.append(f"""
 <div class="winner">
-🏆 <b>En iyi model:</b> {best_model} — accuracy <b>{best_acc:.4f}</b>, weighted F1 {f1_str}
+  <div class="trophy">🏆</div>
+  <div class="text">
+    <div>En iyi model</div>
+    <b>{best_model}</b> — accuracy <b>{best_acc:.4f}</b>, weighted F1 <b>{f1_str}</b>
+  </div>
 </div>
 """)
+    html_parts.append('<div class="section-card">')
     html_parts.append(models_table(runs))
-    html_parts.append("<h3>Görsel karşılaştırmalar (PDF zorunlu görseller)</h3>")
-    html_parts.append(chart_models_comparison(runs))
-    html_parts.append("<h3>AUC-ROC (OvR macro)</h3>")
-    html_parts.append(chart_auc(runs))
-    html_parts.append("<h3>Eğitim süresi karşılaştırması</h3>")
-    html_parts.append(chart_train_time(runs))
+    html_parts.append('</div>')
+    html_parts.append('<h3>Görsel karşılaştırmalar (PDF zorunlu görseller)</h3>')
+    html_parts.append('<div class="chart-block">' + chart_models_comparison(runs) + '</div>')
+    html_parts.append('<h3>AUC-ROC (OvR macro)</h3>')
+    html_parts.append('<div class="chart-block">' + chart_auc(runs) + '</div>')
+    html_parts.append('<h3>Eğitim süresi karşılaştırması</h3>')
+    html_parts.append('<div class="chart-block">' + chart_train_time(runs) + '</div>')
 
     # Feature importance
-    html_parts.append("<h2>5. Feature Importance (PDF zorunlu)</h2>")
-    html_parts.append(chart_feature_importance(runs))
+    html_parts.append('<h2 id="fi">5. Feature Importance <span class="pdf-badge">Adım 7</span></h2>')
+    html_parts.append('<div class="chart-block">' + chart_feature_importance(runs) + '</div>')
 
     # Confusion matrix
-    html_parts.append("<h2>6. Confusion Matrix (PDF zorunlu — en iyi model)</h2>")
-    html_parts.append(chart_confusion_matrix(runs))
+    html_parts.append('<h2 id="cm">6. Confusion Matrix <span class="pdf-badge">Adım 7 zorunlu</span></h2>')
+    html_parts.append('<div class="chart-block">' + chart_confusion_matrix(runs) + '</div>')
 
     # ROC proxy
-    html_parts.append("<h2>7. Per-class Precision/Recall (PDF zorunlu — ROC proxy)</h2>")
-    html_parts.append(chart_per_class_pr(runs))
+    html_parts.append('<h2 id="roc">7. Per-class Precision/Recall <span class="pdf-badge">ROC proxy</span></h2>')
+    html_parts.append('<div class="chart-block">' + chart_per_class_pr(runs) + '</div>')
 
     # EDA charts
-    html_parts.append("<h2>8. Zaman Serisi Analizi (PDF zorunlu)</h2>")
-    html_parts.append(chart_yearly_trend(eda))
-    html_parts.append(chart_hourly_trend(eda))
-    html_parts.append(chart_weekly_trend(eda))
+    html_parts.append('<h2 id="trend">8. Zaman Serisi Analizi <span class="pdf-badge">Adım 7</span></h2>')
+    html_parts.append('<div class="chart-block">' + chart_yearly_trend(eda) + '</div>')
+    html_parts.append('<div class="chart-block">' + chart_hourly_trend(eda) + '</div>')
+    html_parts.append('<div class="chart-block">' + chart_weekly_trend(eda) + '</div>')
 
     # Distributions
-    html_parts.append("<h2>9. Dağılım Analizi (PDF zorunlu — histogram + pie)</h2>")
-    html_parts.append(chart_top_types(eda))
-    html_parts.append(chart_arrest_pie(eda))
+    html_parts.append('<h2 id="dagilim">9. Dağılım Analizi <span class="pdf-badge">Adım 7</span></h2>')
+    html_parts.append('<div class="chart-block">' + chart_top_types(eda) + '</div>')
+    html_parts.append('<div class="chart-block">' + chart_arrest_pie(eda) + '</div>')
 
     # Karşılaşılan zorluklar
     html_parts.append("""
-<h2>10. Karşılaşılan Zorluklar ve Çözümleri</h2>
+<h2 id="zorluklar">10. Karşılaşılan Zorluklar ve Çözümleri</h2>
 <table class="metric-table">
 <tr><th>Zorluk</th><th>Kök neden</th><th>Çözüm</th></tr>
 <tr>
@@ -521,9 +693,8 @@ Crimes.csv ──▶ crime_producer ──Kafka──▶ Spark Structured Stream
 </tr>
 </table>
 
-<h2>11. Tekrarlanabilirlik</h2>
-<pre style="background:#f5f5f5; padding:15px; border-radius:6px;">
-git clone https://github.com/bigdataKOU/bigdataproje.git
+<h2 id="reproduce">11. Tekrarlanabilirlik</h2>
+<pre>git clone https://github.com/bigdataKOU/bigdataproje.git
 cd bigdataproje
 cp .env.example .env
 
@@ -537,10 +708,9 @@ make report        # bu HTML raporu üret
 # Eriş
 # Dashboard: http://localhost:8501
 # MLflow:    http://localhost:5000
-# Spark UI:  http://localhost:8080
-</pre>
+# Spark UI:  http://localhost:8080</pre>
 
-<h2>12. Teslim Kontrolü (PDF Madde 5 — Değerlendirme Kriterleri)</h2>
+<h2 id="kriterler">12. PDF Değerlendirme Kriterleri</h2>
 <table class="metric-table">
 <tr><th>Kriter</th><th>Ağırlık</th><th>Durum</th></tr>
 <tr><td>Docker & Altyapı</td><td>%15</td><td>✓ docker-compose.yml + 4 Dockerfile, 7 servis ayağa kalkıyor</td></tr>
@@ -552,11 +722,16 @@ make report        # bu HTML raporu üret
 <tr><td>Dokümantasyon & Sunum</td><td>%15</td><td>✓ README + teknik_rapor.md + docs/sunum.md + bu HTML</td></tr>
 </table>
 
+</div> <!-- /.container -->
+
 <div class="footer">
-  <div class="thanks">Teşekkürler 🎓</div>
-  <p style="margin-top:10px;">
-    Sunumlarımız: 14 Mayıs / 21 Mayıs / 4 Haziran / 11 Haziran 2026<br>
-    Bu rapor otomatik olarak <code>scripts/make_report.py</code> ile MLflow + Delta sonuçlarından üretilmiştir.
+  <div style="font-size:3em;">🎓</div>
+  <div class="thanks">Teşekkürler</div>
+  <p>Sayın hocamız <b>Dr. Ayşe Gül Eker</b>'e — bu projeyle endüstri-standart bir veri mühendisliği akışını uçtan uca deneyimleme fırsatı verdiği için.</p>
+  <p>Sunum tarihleri: 14 Mayıs · 21 Mayıs · 4 Haziran · 11 Haziran 2026</p>
+  <p style="opacity:0.8; font-size:0.85em; margin-top:18px;">
+    Bu rapor otomatik olarak <code style="background:rgba(255,255,255,0.15);color:white;">scripts/make_report.py</code> ile MLflow + Delta sonuçlarından üretilmiştir.<br>
+    <a href="https://github.com/bigdataKOU/bigdataproje" style="color:white;text-decoration:underline;">github.com/bigdataKOU/bigdataproje</a>
   </p>
 </div>
 
