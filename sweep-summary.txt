@@ -1,4 +1,0 @@
-rank|regParam|maxIter|run_name|status|seconds|started
-16|0.1|10|als-rank16-reg0.1-iter10|ok|127|2026-05-13T13:11:22Z
-64|0.1|10|als-rank64-reg0.1-iter10|ok|197|2026-05-13T13:13:29Z
-96|0.1|10|als-rank96-reg0.1-iter10|ok|293|2026-05-13T13:16:46Z

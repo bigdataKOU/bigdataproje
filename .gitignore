@@ -32,3 +32,10 @@ env/
 .vscode/
 *.swp
 .DS_Store
+
+# Pipeline runtime logs
+logs-bronze.txt
+logs-silver-batch.txt
+logs-sweep-*.txt
+sweep-summary.txt
+sweep-summary-partial.txt
