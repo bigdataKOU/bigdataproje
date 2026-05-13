@@ -1,11 +1,13 @@
 """
-Silver layer: Bronze raw events -> temizlenmis, deduplicate, movies'le join'li
-analitik-hazir tablo.
+Silver layer: Bronze raw events -> temizlenmis, deduplicate, analitik/ML-hazir.
+
+- id'ye gore dedup (ayni suc kaydi tekrar gelirse atilir)
+- primary_type, district, latitude/longitude null'lari filtrele
+- event_time'tan hour_of_day / day_of_week / month / year_derived turetilir
+- Delta'ya partitionBy(event_year) ile yaz
 
 Streaming MERGE icin foreachBatch kullaniyoruz (Delta upsert).
-
-SILVER_BATCH_ONCE=1 ile tek seferlik batch mod: run_all.sh gold oncesi
-streaming mikro-batch gecikmesi olmadan tabloyu garanti yazar.
+SILVER_BATCH_ONCE=1 ile tek seferlik batch mod (run_all.sh icin).
 
 Calistirma:
   /opt/app/run.sh /opt/app/jobs/silver_clean.py
@@ -13,77 +15,67 @@ Calistirma:
 """
 import os
 import sys
+
 from delta.tables import DeltaTable
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
-from pyspark.sql.types import IntegerType, StringType, StructField, StructType
 
 from _session import (
     bronze_path,
     build_spark,
     CHECKPOINT_PATH,
-    movies_csv_path,
     silver_path,
 )
 
 
-MOVIES_SCHEMA = StructType([
-    StructField("movieId", IntegerType(), False),
-    StructField("title", StringType(), True),
-    StructField("genres", StringType(), True),
-])
-
-
-def load_movies(spark: SparkSession) -> DataFrame:
-    return (
-        spark.read.option("header", True)
-        .schema(MOVIES_SCHEMA)
-        .csv(movies_csv_path())
-        .withColumn("genre_list", F.split(F.col("genres"), "\\|"))
-    )
-
-
-def bronze_to_cleaned_silver(bronze_df: DataFrame, movies: DataFrame) -> DataFrame:
-    """Bronze (batch veya stream micro-batch) satirlarini silver semasina donusturur."""
+def bronze_to_cleaned_silver(bronze_df: DataFrame) -> DataFrame:
+    """Bronze (batch veya stream micro-batch) satirlarini silver semasina."""
     return (
         bronze_df.where(
-            F.col("userId").isNotNull()
-            & F.col("movieId").isNotNull()
-            & F.col("rating").between(0.5, 5.0)
+            F.col("id").isNotNull()
+            & F.col("primary_type").isNotNull()
+            & F.col("district").isNotNull()
+            & F.col("latitude").isNotNull()
+            & F.col("longitude").isNotNull()
         )
-        .withColumn(
-            "rating_event_id",
-            F.concat_ws(
-                "_",
-                F.col("userId").cast("string"),
-                F.col("movieId").cast("string"),
-                F.col("timestamp").cast("string"),
-            ),
-        )
-        .dropDuplicates(["rating_event_id"])
-        .join(F.broadcast(movies), on="movieId", how="left")
+        # Aynı id birden cok kez gelirse en yenisi kalsin diye event_time DESC sort + dropDuplicates
+        .dropDuplicates(["id"])
+        .withColumn("hour_of_day", F.hour(F.col("event_time")))
+        .withColumn("day_of_week", F.dayofweek(F.col("event_time")))
+        .withColumn("month", F.month(F.col("event_time")))
+        .withColumn("event_year", F.year(F.col("event_time")))
         .select(
-            "rating_event_id",
-            "userId",
-            "movieId",
-            "rating",
-            "timestamp",
+            "id",
+            "case_number",
+            "primary_type",
+            "description",
+            "location_description",
+            "arrest",
+            "domestic",
+            "beat",
+            "district",
+            "ward",
+            "community_area",
+            "fbi_code",
+            "year",
+            "latitude",
+            "longitude",
             "event_time",
             "event_date",
-            "title",
-            "genres",
-            "genre_list",
+            "event_year",
+            "hour_of_day",
+            "day_of_week",
+            "month",
             "ingestedAt",
         )
     )
 
 
-def upsert_to_silver(spark: SparkSession, movies: DataFrame):
+def upsert_to_silver(spark: SparkSession):
     target_path = silver_path()
 
     def _process(batch_df: DataFrame, batch_id: int) -> None:
-        cleaned = bronze_to_cleaned_silver(batch_df, movies).persist()
-
+        cleaned = bronze_to_cleaned_silver(batch_df).persist()
         try:
             n = cleaned.count()
             if n == 0:
@@ -91,7 +83,7 @@ def upsert_to_silver(spark: SparkSession, movies: DataFrame):
 
             if not DeltaTable.isDeltaTable(spark, target_path):
                 (cleaned.write.format("delta")
-                     .partitionBy("event_date")
+                     .partitionBy("event_year")
                      .mode("overwrite")
                      .save(target_path))
                 print(f"[silver] batch={batch_id} bootstrapped rows={n}",
@@ -100,8 +92,7 @@ def upsert_to_silver(spark: SparkSession, movies: DataFrame):
 
             target = DeltaTable.forPath(spark, target_path)
             (target.alias("t")
-                  .merge(cleaned.alias("s"),
-                         "t.rating_event_id = s.rating_event_id")
+                  .merge(cleaned.alias("s"), "t.id = s.id")
                   .whenNotMatchedInsertAll()
                   .execute())
             print(f"[silver] batch={batch_id} merged rows={n}", flush=True)
@@ -113,18 +104,13 @@ def upsert_to_silver(spark: SparkSession, movies: DataFrame):
 
 def main_batch_once() -> int:
     """Bronze Delta'yi batch okuyup silver'i overwrite eder (run_all guvencesi)."""
-    # Standalone'da arka plandaki bronze tum executor'lari tutarken ikinci
-    # spark-submit (bu job) suresiz kuyrukta kalabiliyor; batch tek JVM'de bitsin.
     os.environ["SPARK_MASTER_URL"] = "local[*]"
-    print("[silver-batch] Spark master=local[*] (cluster ile executor cakismasin)", flush=True)
+    print("[silver-batch] Spark master=local[*]", flush=True)
     spark = build_spark("silver-batch-once")
     spark.sparkContext.setLogLevel("WARN")
 
-    movies = load_movies(spark).cache()
-    movies.count()
-
     bronze_df = spark.read.format("delta").load(bronze_path())
-    cleaned = bronze_to_cleaned_silver(bronze_df, movies)
+    cleaned = bronze_to_cleaned_silver(bronze_df).repartition(32, "event_year")
     n = cleaned.count()
     if n == 0:
         print("[silver-batch] HATA: bronze sonrasi temiz satir yok", flush=True)
@@ -133,7 +119,7 @@ def main_batch_once() -> int:
 
     (
         cleaned.write.format("delta")
-        .partitionBy("event_date")
+        .partitionBy("event_year")
         .mode("overwrite")
         .option("overwriteSchema", "true")
         .save(silver_path())
@@ -147,14 +133,11 @@ def main_streaming() -> int:
     spark = build_spark("silver-clean")
     spark.sparkContext.setLogLevel("WARN")
 
-    movies = load_movies(spark).cache()
-    movies.count()
-
     bronze = spark.readStream.format("delta").load(bronze_path())
 
     query = (
         bronze.writeStream
-        .foreachBatch(upsert_to_silver(spark, movies))
+        .foreachBatch(upsert_to_silver(spark))
         .option("checkpointLocation", f"{CHECKPOINT_PATH}/silver")
         .trigger(processingTime="20 seconds")
         .start()

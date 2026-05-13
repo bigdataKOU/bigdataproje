@@ -1,5 +1,5 @@
 """
-Bronze layer: Kafka 'ratings' topic'inden ham JSON mesajlari okuyup
+Bronze layer: Kafka 'crimes' topic'inden ham JSON mesajlari okuyup
 Delta tablosuna append eder. Hicbir donusum yok, raw event store.
 
 Calistirma:
@@ -8,27 +8,41 @@ Calistirma:
 import sys
 from pyspark.sql import functions as F
 from pyspark.sql.types import (
-    StructType,
-    StructField,
-    LongType,
+    BooleanType,
     DoubleType,
     IntegerType,
+    LongType,
+    StringType,
+    StructField,
+    StructType,
 )
 
 from _session import (
     KAFKA_BROKER,
-    KAFKA_TOPIC_RATINGS,
+    KAFKA_TOPIC_CRIMES,
     bronze_path,
     build_spark,
     CHECKPOINT_PATH,
 )
 
 
-RATING_SCHEMA = StructType([
-    StructField("userId", IntegerType(), False),
-    StructField("movieId", IntegerType(), False),
-    StructField("rating", DoubleType(), False),
-    StructField("timestamp", LongType(), False),
+CRIME_SCHEMA = StructType([
+    StructField("id", LongType(), False),
+    StructField("case_number", StringType(), True),
+    StructField("primary_type", StringType(), False),
+    StructField("description", StringType(), True),
+    StructField("location_description", StringType(), True),
+    StructField("arrest", BooleanType(), True),
+    StructField("domestic", BooleanType(), True),
+    StructField("beat", IntegerType(), True),
+    StructField("district", IntegerType(), True),
+    StructField("ward", IntegerType(), True),
+    StructField("community_area", IntegerType(), True),
+    StructField("fbi_code", StringType(), True),
+    StructField("year", IntegerType(), True),
+    StructField("latitude", DoubleType(), True),
+    StructField("longitude", DoubleType(), True),
+    StructField("event_time_ms", LongType(), False),
     StructField("ingestedAt", LongType(), True),
 ])
 
@@ -40,9 +54,12 @@ def main() -> int:
     raw = (
         spark.readStream.format("kafka")
         .option("kafka.bootstrap.servers", KAFKA_BROKER)
-        .option("subscribe", KAFKA_TOPIC_RATINGS)
+        .option("subscribe", KAFKA_TOPIC_CRIMES)
         .option("startingOffsets", "earliest")
         .option("failOnDataLoss", "false")
+        # Micro-batch'i bound et — yoksa dev batch tek seferde commit etmeye
+        # calisir ve 2-8 core cluster'da uzun sure hicbir Delta commit olmaz.
+        .option("maxOffsetsPerTrigger", "200000")
         .load()
     )
 
@@ -53,7 +70,7 @@ def main() -> int:
             F.col("partition").alias("kafka_partition"),
             F.col("offset").alias("kafka_offset"),
             F.col("timestamp").alias("kafka_timestamp"),
-            F.from_json(F.col("value").cast("string"), RATING_SCHEMA).alias("payload"),
+            F.from_json(F.col("value").cast("string"), CRIME_SCHEMA).alias("payload"),
         )
         .select(
             "kafka_key",
@@ -61,13 +78,9 @@ def main() -> int:
             "kafka_partition",
             "kafka_offset",
             "kafka_timestamp",
-            "payload.userId",
-            "payload.movieId",
-            "payload.rating",
-            "payload.timestamp",
-            "payload.ingestedAt",
+            "payload.*",
         )
-        .withColumn("event_time", F.to_timestamp(F.col("timestamp")))
+        .withColumn("event_time", (F.col("event_time_ms") / 1000.0).cast("timestamp"))
         .withColumn("event_date", F.to_date(F.col("event_time")))
     )
 
