@@ -5,9 +5,11 @@ from pathlib import Path
 import mlflow
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 from deltalake import DeltaTable
 
+# Konfigürasyon
 DELTA_PATH = Path(os.environ.get("DELTA_PATH", "/opt/delta"))
 RECS_PATH = DELTA_PATH / "gold" / "user_recommendations"
 GOLD_MOVIE_PATH = DELTA_PATH / "gold" / "movie_stats"
@@ -16,128 +18,314 @@ BRONZE_PATH = DELTA_PATH / "bronze" / "ratings"
 SILVER_PATH = DELTA_PATH / "silver" / "ratings"
 MLFLOW_TRACKING_URI = os.environ.get("MLFLOW_TRACKING_URI", "http://mlflow:5000")
 
-st.set_page_config(page_title="MovieLens Pipeline", layout="wide")
-st.title("MovieLens Big Data Pipeline")
-st.caption("Kafka → Spark Streaming → Delta Lake → ALS → MLflow")
+# Sayfa konfigürasyonu
+st.set_page_config(
+    page_title="MovieLens Analiz Paneli",
+    layout="wide",
+    initial_sidebar_state="expanded",
+    menu_items={"About": "MovieLens 25M Streaming Veri Mühendisliği Projesi"}
+)
+
+# Özel CSS stilleri
+st.markdown("""
+    <style>
+    .metric-card {
+        background-color: #f0f2f6;
+        padding: 20px;
+        border-radius: 10px;
+        border-left: 5px solid #1f77b4;
+    }
+    .main-title {
+        text-align: center;
+        margin-bottom: 20px;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# Başlık
+st.markdown("# 🎬 MovieLens Analiz Paneli")
+st.markdown("""
+Kafka → Spark Streaming → Delta Lake → ALS → MLflow
+""", help="Tam akış projesi: Gerçek zamanlı veri işleme ve film önerileri")
 
 
+
+# Veri okuma fonksiyonları (cache ile)
 @st.cache_data(ttl=30)
 def read_delta(path: str):
+    """Delta Lake tablosunu pandas DataFrame olarak oku."""
     try:
         return DeltaTable(path).to_pandas()
-    except Exception:
+    except Exception as e:
+        st.error(f"Veri okunamadı: {str(e)[:100]}")
         return None
 
 
 @st.cache_data(ttl=60)
 def read_delta_count(path: str):
+    """Delta Lake tablosundaki satır sayısını oku."""
     try:
         return DeltaTable(path).to_pyarrow_dataset().count_rows()
     except Exception:
         return None
 
 
+# Pipeline durumu - KPI kartları
+st.markdown("### 📊 Pipeline Durumu")
 col1, col2, col3, col4 = st.columns(4)
+
 bronze_n = read_delta_count(str(BRONZE_PATH))
 silver_n = read_delta_count(str(SILVER_PATH))
 movies_n = read_delta_count(str(GOLD_MOVIE_PATH))
 users_n = read_delta_count(str(GOLD_USER_PATH))
-col1.metric("Bronze rows", f"{bronze_n:,}" if bronze_n is not None else "—")
-col2.metric("Silver rows", f"{silver_n:,}" if silver_n is not None else "—")
-col3.metric("Movies (gold)", f"{movies_n:,}" if movies_n is not None else "—")
-col4.metric("Users (gold)", f"{users_n:,}" if users_n is not None else "—")
 
+with col1:
+    st.metric(
+        "🔵 Bronze (Ham)",
+        f"{bronze_n:,}" if bronze_n is not None else "—",
+        help="Kafka'dan alınan ham rating verisi"
+    )
+with col2:
+    st.metric(
+        "🟢 Silver (Temiz)",
+        f"{silver_n:,}" if silver_n is not None else "—",
+        help="Temizlenmiş ve dörüştürülmüş veriler"
+    )
+with col3:
+    st.metric(
+        "⭐ Filmler (Gold)",
+        f"{movies_n:,}" if movies_n is not None else "—",
+        help="Film istatistikleri ve metrikleri"
+    )
+with col4:
+    st.metric(
+        "👥 Kullanıcılar (Gold)",
+        f"{users_n:,}" if users_n is not None else "—",
+        help="Kullanıcı aktivite metrikleri"
+    )
+
+
+
+# Sekme tabanlı içerik
 tab_overview, tab_recs, tab_mlflow = st.tabs(
-    ["📊 Genel", "🎬 Öneriler", "🧪 MLflow"]
+    ["� Genel Analiz", "� Film Önerileri", "🧪 Model Performansı"]
 )
 
+# TAB 1: Genel Analiz
 with tab_overview:
-    st.subheader("Top 20 film (rating sayısı)")
+    st.markdown("### En İyi Filmler (Rating Sayısı)")
+    
     movies = read_delta(str(GOLD_MOVIE_PATH))
     if movies is not None and not movies.empty:
+        # Top 20 filmler
         top = movies.nlargest(20, "rating_count")
+        
+        # Geliştirilmiş bar chart
         fig = px.bar(
             top,
-            x="rating_count", y="title",
+            x="rating_count",
+            y="title",
             orientation="h",
             color="avg_rating",
             color_continuous_scale="Viridis",
-            hover_data=["genres", "popularity_bucket"],
+            hover_data={
+                "rating_count": ":,",
+                "avg_rating": ":.2f",
+                "genres": True,
+                "title": False
+            },
+            labels={
+                "rating_count": "Rating Sayısı",
+                "avg_rating": "Ortalama Puan"
+            }
         )
-        fig.update_layout(height=600, yaxis={"categoryorder": "total ascending"})
+        fig.update_layout(
+            height=500,
+            yaxis={"categoryorder": "total ascending"},
+            showlegend=True,
+            hovermode="closest"
+        )
         st.plotly_chart(fig, use_container_width=True)
     else:
-        st.info("Henüz gold tablosu yok — `gold_features.py` çalıştırılmalı.")
+        st.info("💡 Henüz gold tablosu yok. Spark jobs'u çalıştırmak için `docker-compose up` kullanın.")
 
-    st.subheader("Aktivite kovaları (kullanıcılar)")
+    # Kullanıcı aktivitesi
+    st.markdown("### Kullanıcı Aktivite Dağılımı")
+    
     users = read_delta(str(GOLD_USER_PATH))
     if users is not None and not users.empty:
         bucket_counts = users["activity_bucket"].value_counts().reset_index()
-        bucket_counts.columns = ["bucket", "users"]
-        st.plotly_chart(px.pie(bucket_counts, names="bucket", values="users",
-                               hole=0.4),
-                        use_container_width=True)
+        bucket_counts.columns = ["Aktivite Seviyesi", "Kullanıcı Sayısı"]
+        
+        # Geliştirilmiş pie chart
+        fig = px.pie(
+            bucket_counts,
+            names="Aktivite Seviyesi",
+            values="Kullanıcı Sayısı",
+            hole=0.4,
+            color_discrete_sequence=px.colors.qualitative.Set3,
+            hover_data={"Kullanıcı Sayısı": ":,"}
+        )
+        fig.update_layout(height=450)
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("💡 Henüz kullanıcı aktivite verisi yok.")
 
 
+# TAB 2: Film Önerileri
 with tab_recs:
-    st.subheader("Kullanıcıya özel top-N öneri")
+    st.markdown("### Kullanıcıya Özel Film Önerileri")
+    
     recs = read_delta(str(RECS_PATH))
     if recs is None or recs.empty:
-        st.info("Henüz öneri tablosu yok — `inference.py` çalıştırılmalı.")
+        st.warning("💡 Henüz öneri tablosu yok. Model eğitimi için `train_als.py` ve inference için `inference.py` çalıştırmalısınız.")
     else:
         users_avail = sorted(recs["userId"].unique())[:200]
-        chosen = st.selectbox("userId seç", users_avail)
+        
+        col_user, col_info = st.columns([3, 2])
+        
+        with col_user:
+            chosen = st.selectbox(
+                "👤 Kullanıcı Seç",
+                users_avail,
+                help="Önerileri görmek istediğiniz kullanıcıyı seçin"
+            )
+        
+        # Seçilen kullanıcının önerileri
         sub = (recs[recs["userId"] == chosen]
-                  .sort_values("rank")
-                  .head(20))
-        st.dataframe(
-            sub[["rank", "title", "genres", "predicted_rating",
-                 "avg_rating", "rating_count"]],
-            use_container_width=True,
-            hide_index=True,
-        )
+              .sort_values("rank")
+              .head(20)
+              .copy())
+        
+        if not sub.empty:
+            with col_info:
+                st.metric(
+                    "Toplam Öneri",
+                    len(sub),
+                    help=f"Kullanıcı {chosen} için önerilen film sayısı"
+                )
+            
+            # Geliştirilmiş tablo gösterimi
+            display_cols = ["rank", "title", "genres", "predicted_rating", "avg_rating", "rating_count"]
+            sub_display = sub[display_cols].copy()
+            sub_display.columns = ["Sıra", "Film Adı", "Türler", "Tahmin Puanı", "Ortalama Puan", "Toplam Rating"]
+            
+            st.dataframe(
+                sub_display,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Tahmin Puanı": st.column_config.NumberColumn(format="%.2f ⭐"),
+                    "Ortalama Puan": st.column_config.NumberColumn(format="%.2f"),
+                    "Toplam Rating": st.column_config.NumberColumn(format="%,d"),
+                }
+            )
+        else:
+            st.warning(f"Kullanıcı {chosen} için öneri bulunamadı.")
 
 
+# TAB 3: MLflow Model Performansı
 with tab_mlflow:
-    st.subheader("MLflow run karşılaştırması")
+    st.markdown("### ALS Model Performansı")
+    
     try:
         mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
         client = mlflow.tracking.MlflowClient()
         exp = client.get_experiment_by_name(
             os.environ.get("MLFLOW_EXPERIMENT", "movielens-als")
         )
+        
         if exp is None:
-            st.info("Henüz deney yok.")
+            st.info("💡 Henüz model eğitimi gerçekleştirilmemiş. `train_als.py` komutunu çalıştırın.")
         else:
             runs = client.search_runs(
                 exp.experiment_id,
                 order_by=["attributes.start_time DESC"],
                 max_results=20,
             )
-            rows = []
-            for r in runs:
-                rows.append({
-                    "run_id": r.info.run_id[:8],
-                    "rmse": r.data.metrics.get("rmse"),
-                    "mae": r.data.metrics.get("mae"),
-                    "rank": r.data.params.get("rank"),
-                    "regParam": r.data.params.get("regParam"),
-                    "maxIter": r.data.params.get("maxIter"),
-                    "n_ratings": r.data.params.get("n_ratings"),
-                    "train_seconds": r.data.metrics.get("train_seconds"),
-                })
-            df = pd.DataFrame(rows)
-            st.dataframe(df, use_container_width=True, hide_index=True)
-            if not df.empty and df["rmse"].notna().any():
-                st.plotly_chart(
-                    px.scatter(df.dropna(subset=["rmse"]),
-                               x="rank", y="rmse",
-                               size="n_ratings", color="regParam",
-                               hover_data=["run_id"]),
+            
+            if not runs:
+                st.warning("Henüz tamamlanan eğitim çalıştırması yok.")
+            else:
+                rows = []
+                for r in runs:
+                    rows.append({
+                        "Run ID": r.info.run_id[:8],
+                        "RMSE": r.data.metrics.get("rmse"),
+                        "MAE": r.data.metrics.get("mae"),
+                        "Rank": r.data.params.get("rank"),
+                        "Reg Param": r.data.params.get("regParam"),
+                        "Max Iterasyon": r.data.params.get("maxIter"),
+                        "Rating Sayısı": r.data.params.get("n_ratings"),
+                        "Eğitim Süresi (s)": r.data.metrics.get("train_seconds"),
+                    })
+                
+                df = pd.DataFrame(rows)
+                
+                # Performans metriklerini göster
+                col1, col2, col3 = st.columns(3)
+                
+                if df["RMSE"].notna().any():
+                    best_rmse = df["RMSE"].min()
+                    with col1:
+                        st.metric("🎯 En İyi RMSE", f"{best_rmse:.4f}")
+                
+                if df["MAE"].notna().any():
+                    best_mae = df["MAE"].min()
+                    with col2:
+                        st.metric("📊 En İyi MAE", f"{best_mae:.4f}")
+                
+                with col3:
+                    st.metric("🏃 Toplam Çalıştırmalar", len(df))
+                
+                # Model performansı tablosu
+                st.markdown("#### Son 20 Eğitim Çalıştırması")
+                st.dataframe(
+                    df.sort_values("Run ID", ascending=False),
                     use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "RMSE": st.column_config.NumberColumn(format="%.4f"),
+                        "MAE": st.column_config.NumberColumn(format="%.4f"),
+                        "Rank": st.column_config.NumberColumn(),
+                        "Reg Param": st.column_config.NumberColumn(format="%.2e"),
+                        "Rating Sayısı": st.column_config.NumberColumn(format="%,d"),
+                        "Eğitim Süresi (s)": st.column_config.NumberColumn(format="%.1f"),
+                    }
                 )
+                
+                # RMSE vs Rank scatter plot
+                if not df.empty and df["RMSE"].notna().any():
+                    st.markdown("#### Model Parametreleri ve Performans")
+                    
+                    fig = px.scatter(
+                        df.dropna(subset=["RMSE"]),
+                        x="Rank",
+                        y="RMSE",
+                        size="Rating Sayısı",
+                        color="Reg Param",
+                        hover_data=["Run ID", "MAE", "Eğitim Süresi (s)"],
+                        color_continuous_scale="Viridis",
+                        labels={
+                            "Rank": "Rank (Latent Faktörler)",
+                            "RMSE": "RMSE (Ortalama Hata)",
+                            "Rating Sayısı": "Rating Sayısı"
+                        }
+                    )
+                    fig.update_layout(height=450)
+                    st.plotly_chart(fig, use_container_width=True)
+                    
     except Exception as exc:
-        st.error(f"MLflow erişilemiyor: {exc}")
+        st.error(f"❌ MLflow erişilemiyor: {str(exc)[:200]}")
 
+# Footer
 st.divider()
-st.caption("bigdataKOU/bigdataproje · Spark 3.5 · Delta 3.2 · MLflow 2.16")
+st.markdown("""
+<div style="text-align: center; color: #888;">
+    <small>
+    🔗 MovieLens 25M Streaming Veri Mühendisliği Projesi<br>
+    Kocaeli Üniversitesi • Spark 3.5 • Delta 3.2 • MLflow 2.16 • Streamlit 1.39
+    </small>
+</div>
+""", unsafe_allow_html=True)
+
